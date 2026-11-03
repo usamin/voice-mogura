@@ -21,6 +21,14 @@ button:active{transform:translateY(4px);box-shadow:0 1px #c2581b}button.sub{back
 .mole .f{position:absolute;top:55px;width:100%;font-size:14px}.mole.hit{background:#ff6b6b}.mole.hit .f:after{content:"✕ ✕"}
 #heard{min-height:50px;background:#fff8;border-radius:14px;padding:8px;font-size:20px}#mic{font-size:16px}
 .big{font-size:60px;margin:10px}
+.hole{overflow:visible}.hole{clip-path:inset(-40px -10px 0 -10px)}
+.mole .tg{display:none;position:absolute;top:-30px;left:-10%;width:120%;font-size:14px;font-weight:bold;color:#c00;animation:bob .6s infinite alternate}
+.mole.target.up .tg{display:block}.mole.target.up{box-shadow:0 0 0 4px #ffeb3b,0 0 18px 6px #ffeb3b}.mole.target.up .w{border-color:#e53935;background:#fffde0}
+.mole.up:not(.target) .w{opacity:.85}
+.mole .bub{display:none;position:absolute;top:-30px;left:-15%;width:130%;background:#4caf50;color:#fff;border-radius:10px;font-size:13px;padding:2px;z-index:3}.mole .bub.on{display:block}
+@keyframes bob{to{transform:translateY(5px)}}
+#lang{display:inline-block;margin-top:6px;padding:4px 14px;border-radius:20px;font-weight:bold;font-size:17px}#lang.ja{background:#ffe0b2}#lang.en{background:#bbdefb}
+.okc{color:#2e7d32}.ngc{color:#c62828}
 </style></head><body>
 <div id="home" class="scr on"><h1>🎤 こえで<br>モグラたたき 🔨</h1>
 <p class="card">モグラがもっている<b>かんじ</b>や<b>えいご</b>を<br>こえに出して よもう！<br>ただしく よめたら ポカッ！</p>
@@ -34,8 +42,8 @@ button:active{transform:translateY(4px);box-shadow:0 1px #c2581b}button.sub{back
 <label><input type="checkbox" id="sLower" style="width:auto"> 下の学年の問題もまぜる</label>
 </div><button id="save">もどる</button></div>
 <div id="game" class="scr"><div id="hud"><span>⭐ <b id="score">0</b></span><span>⏰ <b id="time">0</b></span></div>
-<div id="field"></div><div id="heard">…</div><div id="mic">🎤 じゅんびちゅう</div>
+<div id="lang" class="ja"></div><div id="field"></div><div id="heard">…</div><div id="mic">🎤 じゅんびちゅう</div>
 <button class="sub" id="quit" style="font-size:16px;padding:8px 18px">やめる</button></div>
 <div id="end" class="scr"><h1>おしまい！</h1><div class="big" id="final"></div><div class="card" id="miss"></div>
 <button id="again">もういちど</button><button class="sub" id="home2">タイトル</button></div>
-<script src="words.js"></script><script src="app.js"></script></body></html>
+<script src="words.js"></script><script src="match.js"></script><script src="app.js"></script></body></html>
