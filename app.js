@@ -1,10 +1,10 @@
 const $=id=>document.getElementById(id),show=s=>document.querySelectorAll('.scr').forEach(e=>e.classList.toggle('on',e.id==s));
-const DEF={grade:3,mode:'kanji',time:60,speed:5000,lower:false};
+const DEF={grade:3,eLv:'same',mode:'kanji',time:60,speed:5000,lower:false,judge:1};
 let S=Object.assign({},DEF,JSON.parse(localStorage.getItem('moguraSet')||'{}'));
 for(let g=1;g<=6;g++)$('sGrade').innerHTML+=`<option value="${g}">${g}ねんせい</option>`;
-function loadSet(){$('sGrade').value=S.grade;$('sMode').value=S.mode;$('sTime').value=S.time;$('sSpeed').value=S.speed;$('sLower').checked=S.lower}
+function loadSet(){$('sELv').value=S.eLv;$('sJudge').value=S.judge;$('sGrade').value=S.grade;$('sMode').value=S.mode;$('sTime').value=S.time;$('sSpeed').value=S.speed;$('sLower').checked=S.lower}
 $('toSet').onclick=()=>{loadSet();show('set')};
-$('save').onclick=()=>{S={grade:+$('sGrade').value,mode:$('sMode').value,time:+$('sTime').value,speed:+$('sSpeed').value,lower:$('sLower').checked};localStorage.setItem('moguraSet',JSON.stringify(S));show('home')};
+$('save').onclick=()=>{S={eLv:$('sELv').value,judge:+$('sJudge').value,grade:+$('sGrade').value,mode:$('sMode').value,time:+$('sTime').value,speed:+$('sSpeed').value,lower:$('sLower').checked};localStorage.setItem('moguraSet',JSON.stringify(S));show('home')};
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
 if(!SR)$('warn').textContent='このブラウザは おんせいにんしきに たいおうしていません（iPhoneはSafari、AndroidはChromeでひらいてね）';
 // audio
@@ -21,33 +21,40 @@ function csv(t){const rows=[];let r=[],f='',q=false;for(let i=0;i<t.length;i++){
  else if(c=='"')q=true;else if(c==','){r.push(f);f=''}else if(c=='\n'||c=='\r'){if(c=='\r'&&t[i+1]=='\n')i++;r.push(f);rows.push(r);r=[];f=''}else f+=c}
  if(f||r.length){r.push(f);rows.push(r)}return rows}
 const splitR=s=>String(s||'').split(/[、,，\/／]/).map(x=>x.trim()).filter(Boolean);
-function parseTab(text){const out={};csv(text).forEach(([g,w,r,en])=>{g=parseInt(g);w=(w||'').trim();if(!(g>=1&&g<=6)||!w)return;
+// grade: 1〜6=小学校, 7(または「中学」)=中学, 8(または「高校」)=高校
+const gradeOf=g=>{g=String(g||'').trim();if(/^中/.test(g))return 7;if(/^高/.test(g))return 8;if(/^小/.test(g))return 1;return parseInt(g)};
+function parseTab(text){const out={};csv(text).forEach(([g,w,r,en])=>{g=gradeOf(g);w=(w||'').trim();if(!(g>=1&&g<=8)||!w)return;
  if(String(en||'').trim().toUpperCase()=='FALSE')return;(out[g]=out[g]||[]).push([w,splitR(r)])});return out}
-let DATA={k:{},e:{}};for(const g in KANJI)DATA.k[g]=KANJI[g].map(([k,r])=>[k,r.split(',')]);for(const g in ENG)DATA.e[g]=ENG[g].map(w=>[w,[]]);
-try{const c=JSON.parse(localStorage.getItem('moguraSheet')||'null');if(c&&c.k&&c.e)DATA=c}catch(e){}
+let DATA={k:{},e:{}};for(const g in KANJI)DATA.k[g]=KANJI[g].map(([k,r])=>[k,r.split(',')]);for(const g in ENG)DATA.e[g]=ENG[g].map(w=>[w,[]]);DATA.s={1:SENT.map(w=>[w,[]])};const BUILTIN_S=DATA.s;
+try{const c=JSON.parse(localStorage.getItem('moguraSheet')||'null');if(c&&c.k&&c.e)DATA=Object.assign({s:BUILTIN_S},c)}catch(e){}
 async function loadSheet(){try{const ctl=new AbortController();setTimeout(()=>ctl.abort(),6000);
- const [k,e]=await Promise.all(['漢字','英語'].map(t=>fetch(sheetURL(t),{cache:'no-store',signal:ctl.signal}).then(r=>{if(!r.ok)throw r.status;return r.text()})));
- const d={k:parseTab(k),e:parseTab(e)};if(!Object.keys(d.k).length&&!Object.keys(d.e).length)throw 'empty';
+ const [k,e,st]=await Promise.allSettled(['漢字','英語','ショートセンテンス'].map(t=>fetch(sheetURL(t),{cache:'no-store',signal:ctl.signal}).then(r=>{if(!r.ok)throw r.status;return r.text()})));
+ const tab=(x,fb)=>{if(x.status!='fulfilled')return fb;const o=parseTab(x.value);return Object.keys(o).length?o:fb};
+ const d={k:tab(k,DATA.k),e:tab(e,DATA.e),s:tab(st,DATA.s)};if(k.status!='fulfilled'&&e.status!='fulfilled')throw 'offline';
  DATA=d;localStorage.setItem('moguraSheet',JSON.stringify(d));$('warn').textContent=''}catch(err){console.warn('sheet',err)}}
 const sheetReady=loadSheet();
-function pool(){const gs=S.lower?[...Array(S.grade).keys()].map(i=>i+1):[S.grade];let p=[];
- if(S.mode!='eng')gs.forEach(g=>(DATA.k[g]||[]).forEach(([k,r])=>p.push({t:'k',show:k,ans:r})));
- if(S.mode!='kanji')gs.forEach(g=>(DATA.e[g]||[]).forEach(([w,r])=>p.push({t:'e',show:w,ans:r})));return p}
+const upTo=n=>S.lower?[...Array(n).keys()].map(i=>i+1):[n];
+// モード: kanji=漢字 / eng=英単語 / sent=英文 / emix=英単語+英文 / mix=漢字+英単語
+function pool(){const eg=S.eLv=='same'?S.grade:+S.eLv;let p=[];
+ if(S.mode=='kanji'||S.mode=='mix')upTo(Math.min(S.grade,6)).forEach(g=>(DATA.k[g]||[]).forEach(([k,r])=>p.push({t:'k',show:k,ans:r})));
+ if(S.mode=='eng'||S.mode=='emix'||S.mode=='mix')upTo(eg).forEach(g=>(DATA.e[g]||[]).forEach(([w,r])=>p.push({t:'e',show:w,ans:r})));
+ if(S.mode=='sent'||S.mode=='emix')Object.values(DATA.s||{}).flat().forEach(([w,r])=>p.push({t:'s',show:w,ans:r}));return p}
+const LG=q=>q.t=='k'?'k':'e';
 let moles=[],score,left,timer,spawnT,P,running=false,rec,lang,missed;
 function build(){$('field').innerHTML='';moles=[];for(let i=0;i<9;i++){const h=document.createElement('div');h.className='hole';h.innerHTML='<div class="mole"><div class="tg">👇 よんで！</div><div class="bub"></div><div class="w"></div><div class="f">• ᴥ •</div></div>';$('field').appendChild(h);moles.push({el:h.firstChild,q:null,to:0})}}
 function spawn(){if(!running)return;const free=moles.filter(m=>!m.q);const active=moles.filter(m=>m.q).length;
  if(free.length&&active<(S.mode=='mix'?1:2)){const m=free[Math.random()*free.length|0];let q;
-  const cur=moles.find(x=>x.q);do q=P[Math.random()*P.length|0];while(cur&&(q.t!=cur.q.t||q.show==cur.q.show)&&P.some(x=>x.t==cur.q.t&&x.show!=cur.q.show));
-  m.q=q;m.el.querySelector('.w').textContent=q.show;m.el.querySelector('.w').style.fontSize=q.show.length>6?'16px':'22px';m.el.classList.remove('hit');m.born=Date.now();m.el.classList.add('up');mark();sPop();
-  m.born=Date.now();m.to=setTimeout(()=>{if(m.q){missed.push(m.q);sMiss();down(m)}},S.speed);setLang();}
+  const cur=moles.find(x=>x.q);do q=P[Math.random()*P.length|0];while(cur&&(LG(q)!=LG(cur.q)||q.show==cur.q.show)&&P.some(x=>LG(x)==LG(cur.q)&&x.show!=cur.q.show));
+  m.q=q;const W=m.el.querySelector('.w');W.textContent=q.show;W.classList.toggle('sent',q.t=='s');W.style.fontSize=q.t=='s'?(q.show.length>16?'11px':'13px'):q.show.length>9?'13px':q.show.length>6?'16px':'22px';m.el.classList.remove('hit');m.born=Date.now();m.el.classList.add('up');mark();sPop();
+  m.born=Date.now();m.to=setTimeout(()=>{if(m.q){missed.push(m.q);sMiss();down(m)}},q.t=='s'?S.speed*1.6:S.speed);setLang();}
  spawnT=setTimeout(spawn,900)}
 function down(m){m.q=null;m.el.classList.remove('up','target');clearTimeout(m.to);mark()}
 // いちばん先に出たモグラを「ねらい」として光らせる（ほかのモグラも よめば たたける）
-function mark(){const up=moles.filter(x=>x.q).sort((a,b)=>a.born-b.born);moles.forEach(x=>x.el.classList.toggle('target',x==up[0]));const l=up[0]?up[0].q.t:(lang=='en-US'?'e':'k');$('lang').textContent=l=='e'?'🔤 えいごで よんでね':'あ にほんごで よんでね';$('lang').className=l=='e'?'en':'ja'}
-function setLang(){const m=moles.find(x=>x.q);const want=m?(m.q.t=='e'?'en-US':'ja-JP'):lang;if(want!=lang){lang=want;if(rec)try{rec.abort()}catch(e){}}}
+function mark(){const up=moles.filter(x=>x.q).sort((a,b)=>a.born-b.born);moles.forEach(x=>x.el.classList.toggle('target',x==up[0]));const l=up[0]?LG(up[0].q):(lang=='en-US'?'e':'k');$('lang').textContent=l=='e'?'🔤 えいごで よんでね':'あ にほんごで よんでね';$('lang').className=l=='e'?'en':'ja'}
+function setLang(){const m=moles.find(x=>x.q);const want=m?(m.q.t!='k'?'en-US':'ja-JP'):lang;if(want!=lang){lang=want;if(rec)try{rec.abort()}catch(e){}}}
 // alts: 認識候補ぜんぶ。見えているモグラ全員と照らし合わせて、当たったモグラを返す
 function check(alts){const hits=[];moles.forEach(m=>{if(!m.q)return;
- const ok=m.q.t=='e'?Matcher.matchEn(alts,m.q.show,m.q.ans):Matcher.matchJa(alts,m.q.show,m.q.ans);
+ const J=S.judge??1,ok=m.q.t=='s'?Matcher.matchSent(alts,m.q.show,m.q.ans,J):m.q.t=='e'?Matcher.matchEn(alts,m.q.show,m.q.ans,J):Matcher.matchJa(alts,m.q.show,m.q.ans,J);
  if(ok){hits.push(m.q.show);score+=10;$('score').textContent=score;m.el.classList.add('hit');m.el.classList.remove('target');sHit();
   const b=m.el.querySelector('.bub');b.textContent='⭕ '+alts[0];b.classList.add('on');setTimeout(()=>b.classList.remove('on'),900);
   const mm=m;mm.q=null;clearTimeout(mm.to);setTimeout(()=>{mm.el.classList.remove('up');mark()},400)}});return hits}
@@ -63,7 +70,7 @@ function listen(){if(!running||!SR)return;rec=new SR();rec.lang=lang;rec.interim
 const esc=s=>String(s).replace(/[&<>"]/g,c=>'&#'+c.charCodeAt(0)+';');
 async function start(){if(!SR){alert('おんせいにんしきが つかえません');return}
  AC=AC||new (window.AudioContext||window.webkitAudioContext)();AC.resume();$('heard').textContent='じゅんびちゅう…';await Promise.race([sheetReady,new Promise(r=>setTimeout(r,2500))]);P=pool();if(!P.length){alert('もんだいが ありません（せっていかシートを見てね）');return}score=0;left=S.time;missed=[];$('score').textContent=0;$('time').textContent=left;$('heard').textContent='…';
- build();show('game');running=true;lang=S.mode=='eng'?'en-US':'ja-JP';mark();listen();spawn();
+ build();show('game');running=true;lang=/eng|sent|emix/.test(S.mode)?'en-US':'ja-JP';mark();listen();spawn();
  timer=setInterval(()=>{$('time').textContent=--left;if(left<=0)end()},1000)}
 function end(){running=false;clearInterval(timer);clearTimeout(spawnT);moles.forEach(down);try{rec&&rec.abort()}catch(e){}
  $('final').textContent='⭐ '+score;const u=[...new Map(missed.map(q=>[q.show,q])).values()];

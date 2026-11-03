@@ -12,26 +12,42 @@ function lev(a,b){if(a==b)return 0;const m=a.length,n=b.length;if(!m)return n;if
 const sk=w=>w.replace(/ph/g,'f').replace(/ck/g,'k').replace(/c(?=[eiy])/g,'s').replace(/c/g,'k').replace(/q/g,'k').replace(/x/g,'ks').replace(/z/g,'s').replace(/wh/g,'w').replace(/th/g,'t').replace(/gh/g,'').replace(/kn/g,'n').replace(/wr/g,'r').replace(/l/g,'r').replace(/v/g,'b').replace(/y$/,'i').replace(/e$/,'').replace(/[aeiouy]+/g,'a').replace(/(.)\1+/g,'$1');
 const stem=w=>w.length>3?w.replace(/(ies)$/,'y').replace(/(ches|shes|xes|ses)$/,m=>m.slice(0,-2)).replace(/([^s])s$/,'$1'):w;
 const STOP=new Set(['a','an','the','i','it','its','is','say','said','um','uh','oh','my','this','that','please','ok','okay']);
+function looseWord(ts,ws){const L=ws.length,d=lev(ts,ws),a=sk(ts),b=sk(ws);if(!a||!b||a[0]!=b[0])return false;
+ if(a==b)return true;if(L<=3)return d<=1&&ts.length>=2;return d<=Math.ceil(L*.4)||lev(a,b)<=1}
 const enTokens=s=>String(s).toLowerCase().normalize('NFKC').replace(/[^a-z0-9' ]+/g,' ').replace(/'/g,'').split(/\s+/).filter(Boolean).map(t=>DIG[t]||t);
-function closeWord(t,w){ // t: 聞こえた単語, w: 正解
- if(t==w)return true;const ts=stem(t),ws=stem(w);if(ts==ws)return true;
+// lv: 0=やさしい 1=ふつう 2=きびしい
+function closeWord(t,w,lv=1){ // t: 聞こえた単語, w: 正解
+ if(t==w)return true;const ts=stem(t),ws=stem(w);if(ts==ws)return true;if(lv>=2)return false;
+ if(lv<=0&&looseWord(ts,ws))return true;
  const L=w.length,d=lev(ts,ws),f0=ts[0]==ws[0]||sk(ts)[0]==sk(ws)[0];if(!f0)return false;
  if(L<=3){if(d<=1&&ts[0]==ws[0]&&Math.abs(ts.length-ws.length)<=1&&ts.length>=2)return true}
  else if(L<=5){if(d<=1&&(ts.length>=L||ts[ts.length-1]==ws[ws.length-1]||L>=5))return true;if(d<=2&&ts[0]==ws[0]&&sk(ts)==sk(ws))return true}
  else{if(d<=2&&L>=6)return true;if(d<=Math.ceil(L*.34)&&ts[0]==ws[0])return true}
  const a=sk(ts),b=sk(ws);return L>=4&&a==b&&ts[0]==ws[0];}
 // en: word=正解, extra=シートで追加した別解, alts=認識候補（最大10）
-function matchEn(alts,word,extra=[]){
+function matchEn(alts,word,extra=[],lv=1){
  const targets=[word,...extra].map(x=>String(x).toLowerCase().trim()).filter(Boolean);
  for(const alt of alts){const toks=enTokens(alt).filter(t=>!STOP.has(t));if(!toks.length)continue;const joined=toks.join('');
   for(const tg of targets){const tw=enTokens(tg).filter(t=>!STOP.has(t)).join('');if(!tw)continue;
    if(joined==tw)return true;
-   const sounds=SOUND[tw]||[];
-   for(const t of toks){if(sounds.includes(t))return true;if(closeWord(t,tw))return true}
-   if(tw.length>=5&&closeWord(joined,tw))return true;
+   const sounds=lv>=2?[]:SOUND[tw]||[];
+   for(const t of toks){if(sounds.includes(t))return true;if(closeWord(t,tw,lv))return true}
+   if(tw.length>=5&&closeWord(joined,tw,lv))return true;
    if(/[ぁ-んァ-ヶ]/.test(alt)&&extra.some(e=>normJa(e)==normJa(alt)))return true;}}
  return false}
-function matchJa(alts,show,readings){const ans=readings.map(normJa).filter(Boolean),sh=normJa(show);
- return alts.some(a=>{const n=normJa(a);return n&&(n.includes(sh)||ans.some(r=>n.includes(r)))})}
-G.Matcher={matchEn,matchJa,normJa,lev};
+// 英文: 正解の単語のうち、聞こえた単語と合っている割合で判定（やさしい60%・ふつう80%・きびしい100%）
+const CONTR={its:'it is',im:'i am',dont:'do not',doesnt:'does not',cant:'can not',cannot:'can not',lets:'let us',isnt:'is not',arent:'are not',youre:'you are',hes:'he is',shes:'she is',thats:'that is',whats:'what is',wheres:'where is',theyre:'they are',were:'we are'};
+const sTok=s=>enTokens(s).flatMap(t=>(CONTR[t]||t).split(' '));
+const RATE=[.6,.8,1];
+function sentScore(heard,target,lv=1){const tw=sTok(target),used=new Set();if(!tw.length)return 0;const ht=sTok(heard);let ok=0;
+ tw.forEach(w=>{const i=ht.findIndex((t,k)=>!used.has(k)&&(t==w||(lv<2&&(SOUND[w]||[]).includes(t))||closeWord(t,w,lv)));if(i>=0){used.add(i);ok++}});return ok/tw.length}
+function matchSent(alts,sent,extra=[],lv=1){const need=RATE[lv]??.8;
+ return alts.some(a=>[sent,...extra].some(t=>sentScore(a,t,lv)>=need-1e-9))}
+function matchJa(alts,show,readings,lv=1){const ans=readings.map(normJa).filter(Boolean),sh=normJa(show);
+ return alts.some(a=>{const n=normJa(a);if(!n)return false;
+  if(lv>=2)return n==sh||ans.includes(n); // きびしい: その言葉だけを よむ
+  if(n.includes(sh)||ans.some(r=>n.includes(r)))return true;
+  // やさしい: 読みの一部（2文字以上）や1文字ちがいもOK
+  return lv<=0&&ans.some(r=>(n.length>=2&&r.includes(n)&&n.length>=r.length/2)||(r.length>=3&&lev(n,r)<=1))})}
+G.Matcher={matchEn,matchJa,matchSent,sentScore,normJa,lev};
 })(typeof window!='undefined'?window:globalThis);
