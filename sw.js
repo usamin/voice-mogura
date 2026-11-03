@@ -1,4 +1,5 @@
-const C='mogura-v4',F=['./','index.html','app.js','match.js','words.js','manifest.json','icon.svg'];
+importScripts('version.js');
+const C='mogura-'+self.APP_VER,F=['./','version.js','index.html','app.js','match.js','words.js','manifest.json','icon.svg'];
 self.addEventListener('install',e=>{self.skipWaiting();e.waitUntil(caches.open(C).then(c=>c.addAll(F)))});
 self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!=C).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
 // すべてネット優先（シートもゲーム本体も）、つながらないときだけキャッシュ

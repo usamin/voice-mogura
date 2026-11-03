@@ -40,11 +40,26 @@ function pool(){const eg=S.eLv=='same'?S.grade:+S.eLv;let p=[];
  if(S.mode=='eng'||S.mode=='emix'||S.mode=='mix')upTo(eg).forEach(g=>(DATA.e[g]||[]).forEach(([w,r])=>p.push({t:'e',show:w,ans:r})));
  if(S.mode=='sent'||S.mode=='emix')Object.values(DATA.s||{}).flat().forEach(([w,r])=>p.push({t:'s',show:w,ans:r}));return p}
 const LG=q=>q.t=='k'?'k':'e';
+
+// ===== ドラゴン（金=+20てん / 闇=+2びょう）=====
+const DRG={g:{id:'g',b1:'#ffca28',b2:'#c62828',wing:'#d32f2f',edge:'#7a3b00',mem:'#ffd54f',horn:'#fff8e1',crest:'#ffd600',belly:'#fff176',eye:'#fff',aura:1,extra:'<circle class="glow" cx="120" cy="46" r="4" fill="#fff"/>'},
+ d:{id:'d',b1:'#4a148c',b2:'#0d1b3e',wing:'#1a1446',edge:'#000',mem:'#7c4dff',horn:'#b0bec5',crest:'#00e5ff',belly:'#283593',eye:'#00e5ff',aura:0,extra:'<path class="glow" d="M30 20 L44 40 L36 42 L50 64 L28 38 L36 36Z M210 20 L196 40 L204 42 L190 64 L212 38 L204 36Z" fill="#ffff00"/>'}};
+const dsvg=c=>`<svg class="ds ds${c.id}" viewBox="0 0 240 125">
+${c.aura?`<ellipse class="glow" cx="120" cy="70" rx="115" ry="70" fill="url(#a${c.id})"/>`:''}<g fill="${c.wing}" stroke="${c.edge}" stroke-width="2"><path d="M78 60 L5 8 L18 40 L0 45 L22 70 L8 82 L60 95 Z"/><path d="M162 60 L235 8 L222 40 L240 45 L218 70 L232 82 L180 95 Z"/></g>
+<g stroke="${c.mem}" stroke-width="1.5" fill="none"><path d="M75 65 L12 18 M70 75 L8 50 M65 85 L20 78"/><path d="M165 65 L228 18 M170 75 L232 50 M175 85 L220 78"/></g>
+<path d="M97 32 Q88 20 76 14 Q94 16 105 30Z M143 32 Q152 20 164 14 Q146 16 135 30Z" fill="${c.horn}" stroke="${c.edge}" stroke-width="1.5"/>
+<path class="bd" d="M120 22 Q170 22 172 72 L176 125 L64 125 L68 72 Q70 22 120 22Z" fill="url(#b${c.id})" stroke="${c.edge}" stroke-width="2"/><path d="M110 26 L114 16 L120 24 L126 16 L130 26" fill="${c.crest}"/>
+<path d="M100 100 L120 92 L140 100 L140 125 L100 125Z" fill="${c.belly}" opacity=".8"/><path d="M104 106 H136 M102 114 H138" stroke="${c.edge}" stroke-width="1.5"/>
+<g class="eye"><path d="M90 58 L112 64 L108 72 L90 68Z M150 58 L128 64 L132 72 L150 68Z" fill="${c.eye}"/><path d="M100 62 v8 M140 62 v8" stroke="#000" stroke-width="2.5"/></g>
+<text class="x" x="120" y="72" text-anchor="middle" font-size="20" font-weight="bold" fill="#000">✕ ✕</text>
+<path d="M108 88 Q120 94 132 88" stroke="#000" stroke-width="2" fill="none"/><path d="M111 89 l2 6 l2 -5 M129 89 l-2 6 l-2 -5" fill="#fff"/><circle cx="113" cy="80" r="1.8"/><circle cx="127" cy="80" r="1.8"/>${c.extra}</svg>`;
+const DEFS='<svg width="0" height="0" style="position:absolute">'+[DRG.g,DRG.d].map(c=>`<defs><radialGradient id="a${c.id}"><stop offset="0" stop-color="#ffd600" stop-opacity=".8"/><stop offset="1" stop-color="#ffd600" stop-opacity="0"/></radialGradient><linearGradient id="b${c.id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${c.b1}"/><stop offset="1" stop-color="${c.b2}"/></linearGradient></defs>`).join('')+'</svg>';
 let moles=[],score,left,timer,spawnT,P,running=false,rec,lang,missed;
-function build(){$('field').innerHTML='';moles=[];for(let i=0;i<9;i++){const h=document.createElement('div');h.className='hole';h.innerHTML='<div class="mole"><div class="tg">👇 よんで！</div><div class="bub"></div><div class="w"></div><div class="f">• ᴥ •</div></div>';$('field').appendChild(h);moles.push({el:h.firstChild,q:null,to:0})}}
+function build(){$('field').innerHTML=DEFS;moles=[];for(let i=0;i<9;i++){const h=document.createElement('div');h.className='hole';h.innerHTML='<div class="mole"><div class="tg">👇 よんで！</div><div class="bub"></div><div class="w"></div><div class="f">• ᴥ •</div>'+dsvg(DRG.g)+dsvg(DRG.d)+'<span class="pts"></span><div class="fx"></div></div>';$('field').appendChild(h);moles.push({el:h.firstChild,q:null,to:0})}}
 function spawn(){if(!running)return;const free=moles.filter(m=>!m.q);const active=moles.filter(m=>m.q).length;
  if(free.length&&active<(S.mode=='mix'?1:2)){const m=free[Math.random()*free.length|0];let q;
   const cur=moles.find(x=>x.q);do q=P[Math.random()*P.length|0];while(cur&&(LG(q)!=LG(cur.q)||q.show==cur.q.show)&&P.some(x=>LG(x)==LG(cur.q)&&x.show!=cur.q.show));
+  m.kind=(r=>r<.09?'g':r<.18?'d':'')(Math.random());m.el.classList.remove('dg','dd');if(m.kind)m.el.classList.add('d'+m.kind);m.el.querySelector('.pts').textContent=m.kind=='g'?'20':m.kind=='d'?'+2秒':'';
   m.q=q;const W=m.el.querySelector('.w');W.textContent=q.show;W.classList.toggle('sent',q.t=='s');W.style.fontSize=q.t=='s'?(q.show.length>16?'11px':'13px'):q.show.length>9?'13px':q.show.length>6?'16px':'22px';m.el.classList.remove('hit');m.born=Date.now();m.el.classList.add('up');mark();sPop();
   m.born=Date.now();m.to=setTimeout(()=>{if(m.q){missed.push(m.q);sMiss();down(m)}},q.t=='s'?S.speed*1.6:S.speed);setLang();}
  spawnT=setTimeout(spawn,900)}
@@ -55,7 +70,7 @@ function setLang(){const m=moles.find(x=>x.q);const want=m?(m.q.t!='k'?'en-US':'
 // alts: 認識候補ぜんぶ。見えているモグラ全員と照らし合わせて、当たったモグラを返す
 function check(alts){const hits=[];moles.forEach(m=>{if(!m.q)return;
  const J=S.judge??1,ok=m.q.t=='s'?Matcher.matchSent(alts,m.q.show,m.q.ans,J):m.q.t=='e'?Matcher.matchEn(alts,m.q.show,m.q.ans,J):Matcher.matchJa(alts,m.q.show,m.q.ans,J);
- if(ok){hits.push(m.q.show);score+=10;$('score').textContent=score;m.el.classList.add('hit');m.el.classList.remove('target');sHit();
+ if(ok){hits.push(m.q.show);score+=m.kind=='g'?20:10;if(m.kind=='d'){left+=2;$('time').textContent=left;const fx=m.el.querySelector('.fx');fx.textContent='+2びょう！';fx.classList.remove('on');void fx.offsetWidth;fx.classList.add('on')}$('score').textContent=score;m.el.classList.add('hit');m.el.classList.remove('target');sHit();
   const b=m.el.querySelector('.bub');b.textContent='⭕ '+alts[0];b.classList.add('on');setTimeout(()=>b.classList.remove('on'),900);
   const mm=m;mm.q=null;clearTimeout(mm.to);setTimeout(()=>{mm.el.classList.remove('up');mark()},400)}});return hits}
 function listen(){if(!running||!SR)return;rec=new SR();rec.lang=lang;rec.interimResults=true;rec.continuous=!/iPhone|iPad/.test(navigator.userAgent);rec.maxAlternatives=10;
@@ -75,5 +90,6 @@ async function start(){if(!SR){alert('おんせいにんしきが つかえま�
 function end(){running=false;clearInterval(timer);clearTimeout(spawnT);moles.forEach(down);try{rec&&rec.abort()}catch(e){}
  $('final').textContent='⭐ '+score;const u=[...new Map(missed.map(q=>[q.show,q])).values()];
  $('miss').innerHTML=u.length?'<b>れんしゅうしよう</b><br>'+u.map(q=>esc(q.show)+(q.t=='k'?'（'+esc(q.ans.join('・'))+'）':'')).join('<br>'):'ぜんぶ たたけたね！すごい！';show('end');tone(660,.2);setTimeout(()=>tone(990,.4),200)}
+$('ver').textContent=APP_VER+'・'+APP_DATE;
 $('go').onclick=start;$('again').onclick=start;$('quit').onclick=end;$('home2').onclick=()=>show('home');
 if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js');
