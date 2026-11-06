@@ -2,9 +2,11 @@ const $=id=>document.getElementById(id),show=s=>document.querySelectorAll('.scr'
 const DEF={grade:3,eLv:'same',mode:'kanji',time:60,speed:5000,lower:false,judge:1};
 let S=Object.assign({},DEF,JSON.parse(localStorage.getItem('moguraSet')||'{}'));
 for(let g=1;g<=6;g++)$('sGrade').innerHTML+=`<option value="${g}">${g}ねんせい</option>`;
-function loadSet(){$('sELv').value=S.eLv;$('sJudge').value=S.judge;$('sGrade').value=S.grade;$('sMode').value=S.mode;$('sTime').value=S.time;$('sSpeed').value=S.speed;$('sLower').checked=S.lower}
+function syncKtestNote(){const n=$('ktestNote');if(n)n.style.display=$('sMode').value==='ktest'?'block':'none'}
+function loadSet(){$('sELv').value=S.eLv;$('sJudge').value=S.judge;$('sGrade').value=S.grade;$('sMode').value=S.mode;$('sTime').value=S.time;$('sSpeed').value=S.speed;$('sLower').checked=S.lower;syncKtestNote()}
 $('toSet').onclick=()=>{loadSet();show('set')};
-$('save').onclick=()=>{S={eLv:$('sELv').value,judge:+$('sJudge').value,grade:+$('sGrade').value,mode:$('sMode').value,time:+$('sTime').value,speed:+$('sSpeed').value,lower:$('sLower').checked};localStorage.setItem('moguraSet',JSON.stringify(S));show('home')};
+$('sMode').onchange=syncKtestNote;
+$('save').onclick=()=>{S={eLv:$('sELv').value,judge:+$('sJudge').value,grade:+$('sGrade').value,mode:$('sMode').value,time:+$('sTime').value,speed:+$('sSpeed').value,lower:$('sLower').checked};localStorage.setItem('moguraSet',JSON.stringify(S));bindLex();refreshHint();show('home')};
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
 if(!SR)$('warn').textContent='このブラウザは おんせいにんしきに たいおうしていません（iPhoneはSafari、AndroidはChromeでひらいてね）';
 // audio
@@ -25,20 +27,39 @@ const splitR=s=>String(s||'').split(/[、,，\/／]/).map(x=>x.trim()).filter(Bo
 const gradeOf=g=>{g=String(g||'').trim();if(/^中/.test(g))return 7;if(/^高/.test(g))return 8;if(/^小/.test(g))return 1;return parseInt(g)};
 function parseTab(text){const out={};csv(text).forEach(([g,w,r,en])=>{g=gradeOf(g);w=(w||'').trim();if(!(g>=1&&g<=8)||!w)return;
  if(String(en||'').trim().toUpperCase()=='FALSE')return;(out[g]=out[g]||[]).push([w,splitR(r)])});return out}
-let DATA={k:{},e:{}};for(const g in KANJI)DATA.k[g]=KANJI[g].map(([k,r])=>[k,r.split(',')]);for(const g in ENG)DATA.e[g]=ENG[g].map(w=>[w,[]]);DATA.s={1:SENT.map(w=>[w,[]])};const BUILTIN_S=DATA.s;
-try{const c=JSON.parse(localStorage.getItem('moguraSheet')||'null');if(c&&c.k&&c.e)DATA=Object.assign({s:BUILTIN_S},c)}catch(e){}
-// 同音の別表記は、いまの学年だけでなく読み込まれた漢字表ぜんぶで判定する（シート更新後もここを通す）
-function bindLex(){Matcher.setJaLexiconFromTable(DATA.k)}
-bindLex();
+function normHead(s){return String(s||'').replace(/^\ufeff/,'').trim().toLowerCase().replace(/[（(].*$/,'').trim()}
+const TEST_K=['漢字','かんじ','kanji','word','words'];
+const TEST_R=['読み','よみ','readings','reading','yomi'];
+function parseTestSheet(text){const rows=csv(String(text||'').replace(/^\ufeff/,''));const out=[];
+ let i0=0;while(i0<rows.length&&rows[i0].every(c=>!String(c||'').trim()))i0++;if(i0>=rows.length)return out;
+ const head=rows[i0].map(normHead);const ki=head.findIndex(h=>TEST_K.includes(h)),ri=head.findIndex(h=>TEST_R.includes(h));
+ let colK=0,colR=1,start=i0;if(ki>=0&&ri>=0&&ki!==ri){colK=ki;colR=ri;start=i0+1}
+ for(let i=start;i<rows.length;i++){const row=rows[i]||[];const kanji=String(row[colK]||'').trim();const reading=String(row[colR]||'').trim();
+  if(!kanji||!reading)continue;const hk=normHead(kanji),hr=normHead(reading);
+  if(TEST_K.includes(hk)&&TEST_R.includes(hr)||TEST_R.includes(hk)&&TEST_K.includes(hr))continue;
+  const rs=splitR(reading);if(!rs.length)continue;out.push([kanji,rs])}
+ return out}
+let DATA={k:{},e:{},kt:[]};for(const g in KANJI)DATA.k[g]=KANJI[g].map(([k,r])=>[k,r.split(',')]);for(const g in ENG)DATA.e[g]=ENG[g].map(w=>[w,[]]);DATA.s={1:SENT.map(w=>[w,[]])};const BUILTIN_S=DATA.s;
+try{const c=JSON.parse(localStorage.getItem('moguraSheet')||'null');if(c&&c.k&&c.e){DATA=Object.assign({s:BUILTIN_S,kt:[]},c);if(!Array.isArray(DATA.kt))DATA.kt=[]}}catch(e){}
+// 同音の別表記は、いまの学年だけでなく読み込まれた漢字表ぜんぶ。漢字テスト用の表記は、そのモードのときだけ足す
+function bindLex(){Matcher.setJaLexicon(Matcher.lexiconRows(S.mode,DATA.k,DATA.kt))}
+const KTEST_HINT='「漢字テスト用」のシートに、A列へ漢字、B列へ読みを入れてね（1行目は見出しです）';
+function refreshHint(){if(!SR)return;$('warn').textContent=(S.mode==='ktest'&&!(DATA.kt&&DATA.kt.length))?KTEST_HINT:''}
+bindLex();refreshHint();
 async function loadSheet(){try{const ctl=new AbortController();setTimeout(()=>ctl.abort(),6000);
- const [k,e,st]=await Promise.allSettled(['漢字','英語','ショートセンテンス'].map(t=>fetch(sheetURL(t),{cache:'no-store',signal:ctl.signal}).then(r=>{if(!r.ok)throw r.status;return r.text()})));
+ const [k,e,st,kt]=await Promise.allSettled(['漢字','英語','ショートセンテンス','漢字テスト用'].map(t=>fetch(sheetURL(t),{cache:'no-store',signal:ctl.signal}).then(r=>{if(!r.ok)throw r.status;return r.text()})));
  const tab=(x,fb)=>{if(x.status!='fulfilled')return fb;const o=parseTab(x.value);return Object.keys(o).length?o:fb};
- const d={k:tab(k,DATA.k),e:tab(e,DATA.e),s:tab(st,DATA.s)};if(k.status!='fulfilled'&&e.status!='fulfilled')throw 'offline';
- DATA=d;bindLex();localStorage.setItem('moguraSheet',JSON.stringify(d));$('warn').textContent=''}catch(err){console.warn('sheet',err)}}
+ const ktOk=kt.status==='fulfilled',ktRows=Matcher.nextKt(ktOk,ktOk?parseTestSheet(kt.value):[],DATA.kt);
+ if(k.status!='fulfilled'&&e.status!='fulfilled'&&!ktOk)throw 'offline';
+ const mainOff=k.status!='fulfilled'&&e.status!='fulfilled';
+ const d={k:tab(k,DATA.k),e:tab(e,DATA.e),s:tab(st,DATA.s),kt:ktRows};
+ if(mainOff){d.k=DATA.k;d.e=DATA.e;d.s=DATA.s}
+ DATA=d;bindLex();localStorage.setItem('moguraSheet',JSON.stringify(d));refreshHint()}catch(err){console.warn('sheet',err)}}
 const sheetReady=loadSheet();
 const upTo=n=>S.lower?[...Array(n).keys()].map(i=>i+1):[n];
 // モード: kanji=漢字 / eng=英単語 / sent=英文 / emix=英単語+英文 / mix=漢字+英単語
-function pool(){const eg=S.eLv=='same'?S.grade:+S.eLv;let p=[];
+function pool(){if(S.mode==='ktest')return Matcher.kanjiQuestions(DATA.kt);
+ const eg=S.eLv=='same'?S.grade:+S.eLv;let p=[];
  if(S.mode=='kanji'||S.mode=='mix')upTo(Math.min(S.grade,6)).forEach(g=>(DATA.k[g]||[]).forEach(([k,r])=>p.push({t:'k',show:k,ans:r})));
  if(S.mode=='eng'||S.mode=='emix'||S.mode=='mix')upTo(eg).forEach(g=>(DATA.e[g]||[]).forEach(([w,r])=>p.push({t:'e',show:w,ans:r})));
  if(S.mode=='sent'||S.mode=='emix')Object.values(DATA.s||{}).flat().forEach(([w,r])=>p.push({t:'s',show:w,ans:r}));return p}
@@ -59,39 +80,44 @@ ${c.aura?`<ellipse class="glow" cx="120" cy="70" rx="115" ry="70" fill="url(#a${
 const DEFS='<svg width="0" height="0" style="position:absolute">'+[DRG.g,DRG.d].map(c=>`<defs><radialGradient id="a${c.id}"><stop offset="0" stop-color="#ffd600" stop-opacity=".8"/><stop offset="1" stop-color="#ffd600" stop-opacity="0"/></radialGradient><linearGradient id="b${c.id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${c.b1}"/><stop offset="1" stop-color="${c.b2}"/></linearGradient></defs>`).join('')+'</svg>';
 let moles=[],score,left,timer,spawnT,P,running=false,rec,lang,missed;
 function build(){$('field').innerHTML=DEFS;moles=[];for(let i=0;i<9;i++){const h=document.createElement('div');h.className='hole';h.innerHTML='<div class="mole"><div class="tg">👇 よんで！</div><div class="bub"></div><div class="w"></div><div class="f">• ᴥ •</div>'+dsvg(DRG.g)+dsvg(DRG.d)+'<span class="pts"></span><div class="fx"></div></div>';$('field').appendChild(h);moles.push({el:h.firstChild,q:null,to:0})}}
-function spawn(){if(!running)return;const free=moles.filter(m=>!m.q);const active=moles.filter(m=>m.q).length;
+function spawn(){if(!running)return;const free=moles.filter(Matcher.moleOpen);const active=moles.filter(m=>m.q).length;
  if(free.length&&active<(S.mode=='mix'?1:2)){const m=free[Math.random()*free.length|0];let q;
-  const cur=moles.find(x=>x.q);do q=P[Math.random()*P.length|0];while(cur&&(LG(q)!=LG(cur.q)||q.show==cur.q.show)&&P.some(x=>LG(x)==LG(cur.q)&&x.show!=cur.q.show));
+  const cur=moles.find(x=>x.q&&!x.hit);do q=P[Math.random()*P.length|0];while(cur&&(LG(q)!=LG(cur.q)||q.show==cur.q.show)&&P.some(x=>LG(x)==LG(cur.q)&&x.show!=cur.q.show));
   m.kind=(r=>r<.09?'g':r<.18?'d':'')(Math.random());m.el.classList.remove('dg','dd');if(m.kind)m.el.classList.add('d'+m.kind);m.el.querySelector('.pts').textContent=m.kind=='g'?'20':m.kind=='d'?'+2秒':'';
-  m.q=q;const W=m.el.querySelector('.w');W.textContent=q.show;W.classList.toggle('sent',q.t=='s');W.style.fontSize=q.t=='s'?(q.show.length>16?'11px':'13px'):q.show.length>9?'13px':q.show.length>6?'16px':'22px';m.el.classList.remove('hit');m.born=Date.now();m.el.classList.add('up');mark();sPop();
-  m.born=Date.now();m.to=setTimeout(()=>{if(m.q){missed.push(m.q);sMiss();down(m)}},q.t=='s'?S.speed*1.6:S.speed);setLang();}
+  m.hit=false;m.q=q;const W=m.el.querySelector('.w');W.textContent=q.show;W.classList.toggle('sent',q.t=='s');W.style.fontSize=q.t=='s'?(q.show.length>16?'11px':'13px'):q.show.length>9?'13px':q.show.length>6?'16px':'22px';m.el.classList.remove('hit');m.born=Date.now();m.el.classList.add('up');mark();sPop();
+  m.born=Date.now();m.to=setTimeout(()=>{if(Matcher.countsAsMiss(m)){missed.push(m.q);sMiss();down(m)}},q.t=='s'?S.speed*1.6:S.speed);setLang();}
  spawnT=setTimeout(spawn,900)}
-function down(m){m.q=null;m.el.classList.remove('up','target');clearTimeout(m.to);mark()}
+function down(m){m.q=null;m.hit=false;m.el.classList.remove('up','target');clearTimeout(m.to);m.to=0;mark()}
 // いちばん先に出たモグラを「ねらい」として光らせる（ほかのモグラも よめば たたける）
-function mark(){const up=moles.filter(x=>x.q).sort((a,b)=>a.born-b.born);moles.forEach(x=>x.el.classList.toggle('target',x==up[0]));const l=up[0]?LG(up[0].q):(lang=='en-US'?'e':'k');$('lang').textContent=l=='e'?'🔤 えいごで よんでね':'あ にほんごで よんでね';$('lang').className=l=='e'?'en':'ja'}
-function setLang(){const m=moles.find(x=>x.q);const want=m?(m.q.t!='k'?'en-US':'ja-JP'):lang;if(want!=lang){lang=want;if(rec)try{rec.abort()}catch(e){}}}
+function mark(){const up=moles.filter(x=>x.q&&!x.hit).sort((a,b)=>a.born-b.born);moles.forEach(x=>x.el.classList.toggle('target',x==up[0]));const l=up[0]?LG(up[0].q):(lang=='en-US'?'e':'k');$('lang').textContent=l=='e'?'🔤 えいごで よんでね':'あ にほんごで よんでね';$('lang').className=l=='e'?'en':'ja'}
+function setLang(){const m=moles.find(x=>x.q&&!x.hit);const want=m?(m.q.t!='k'?'en-US':'ja-JP'):lang;if(want!=lang){lang=want;if(rec)try{rec.abort()}catch(e){}}}
 // alts: 認識候補ぜんぶ。見えているモグラ全員と照らし合わせて、当たったモグラを返す
-function check(alts){const hits=[];moles.forEach(m=>{if(!m.q)return;
+function check(alts){const hits=[];moles.forEach(m=>{if(!m.q||m.hit)return;
  const J=S.judge??1,ok=m.q.t=='s'?Matcher.matchSent(alts,m.q.show,m.q.ans,J):m.q.t=='e'?Matcher.matchEn(alts,m.q.show,m.q.ans,J):Matcher.matchJa(alts,m.q.show,m.q.ans,J);
  if(ok){hits.push(m.q.show);score+=m.kind=='g'?20:10;if(m.kind=='d'){left+=2;$('time').textContent=left;const fx=m.el.querySelector('.fx');fx.textContent='+2びょう！';fx.classList.remove('on');void fx.offsetWidth;fx.classList.add('on')}$('score').textContent=score;m.el.classList.add('hit');m.el.classList.remove('target');sHit();
   const b=m.el.querySelector('.bub');b.textContent='⭕ '+alts[0];b.classList.add('on');setTimeout(()=>b.classList.remove('on'),900);
-  const mm=m;mm.q=null;clearTimeout(mm.to);setTimeout(()=>{mm.el.classList.remove('up');mark()},400)}});return hits}
+  // 正解しても消えるまで q を残す。すぐ空けると、隠れた穴に別の問題が入って復習に紛れ込む
+  clearTimeout(m.to);m.to=0;m.hit=true;const mm=m;setTimeout(()=>down(mm),400)}});return hits}
 function listen(){if(!running||!SR)return;rec=new SR();rec.lang=lang;rec.interimResults=true;rec.continuous=!/iPhone|iPad/.test(navigator.userAgent);rec.maxAlternatives=10;
  rec.onstart=()=>$('mic').textContent='🎤 きいてるよ（'+(lang=='ja-JP'?'にほんご':'えいご')+'）';
  rec.onresult=e=>{for(let i=e.resultIndex;i<e.results.length;i++){const r=e.results[i],alts=[];for(let j=0;j<r.length;j++)alts.push(r[j].transcript);
   const hits=check(alts),H=$('heard');
   if(hits.length){H.innerHTML='きこえた「'+esc(alts[0])+'」<br><b class="okc">⭕ '+hits.map(esc).join('・')+' に あたり！</b>';try{rec.abort()}catch(x){}}
-  else if(r.isFinal&&moles.some(m=>m.q)){H.innerHTML=Matcher.renderMiss(alts,moles.filter(m=>m.q).map(m=>({t:m.q.t,show:m.q.show,ans:m.q.ans})),esc);sMiss()}
+  else if(r.isFinal&&moles.some(m=>m.q&&!m.hit)){H.innerHTML=Matcher.renderMiss(alts,moles.filter(m=>m.q&&!m.hit).map(m=>({t:m.q.t,show:m.q.show,ans:m.q.ans})),esc);sMiss()}
   else H.innerHTML='きこえた「'+esc(alts[0])+'」…'}};
  rec.onerror=e=>{if(e.error=='not-allowed'||e.error=='service-not-allowed'){$('mic').textContent='⚠️ マイクがきょかされていません';running&&end()}};
  rec.onend=()=>{if(running)setTimeout(listen,150)};try{rec.start()}catch(e){setTimeout(listen,500)}}
 const esc=s=>String(s).replace(/[&<>"]/g,c=>'&#'+c.charCodeAt(0)+';');
+function stopClocks(){clearInterval(timer);timer=0;clearTimeout(spawnT);spawnT=0}
 async function start(){if(!SR){alert('おんせいにんしきが つかえません');return}
- AC=AC||new (window.AudioContext||window.webkitAudioContext)();AC.resume();$('heard').textContent='じゅんびちゅう…';await Promise.race([sheetReady,new Promise(r=>setTimeout(r,2500))]);P=pool();if(!P.length){alert('もんだいが ありません（せっていかシートを見てね）');return}score=0;left=S.time;missed=[];$('score').textContent=0;$('time').textContent=left;$('heard').textContent='…';
+ AC=AC||new (window.AudioContext||window.webkitAudioContext)();AC.resume();$('heard').textContent='じゅんびちゅう…';await Promise.race([sheetReady,new Promise(r=>setTimeout(r,2500))]);P=pool();if(S.mode==='ktest'&&!P.length){$('warn').textContent=KTEST_HINT;show('home');return}if(!P.length){alert('もんだいが ありません（せっていかシートを見てね）');return}
+ stopClocks();if(running){running=false;moles.forEach(down);try{rec&&rec.abort()}catch(e){}}
+ score=0;left=S.time;missed=[];$('score').textContent=0;$('time').textContent=left;$('heard').textContent='…';
  build();show('game');running=true;lang=/eng|sent|emix/.test(S.mode)?'en-US':'ja-JP';mark();listen();spawn();
  timer=setInterval(()=>{$('time').textContent=--left;if(left<=0)end()},1000)}
-function end(){running=false;clearInterval(timer);clearTimeout(spawnT);moles.forEach(down);try{rec&&rec.abort()}catch(e){}
- $('final').textContent='⭐ '+score;const u=[...new Map(missed.map(q=>[q.show,q])).values()];
+function end(){if(!running&&!moles.some(m=>m.q)){show('end');return}running=false;stopClocks();
+ moles.forEach(m=>{if(Matcher.countsAsMiss(m))missed.push(m.q);down(m)});try{rec&&rec.abort()}catch(e){}
+ $('final').textContent='⭐ '+score;const u=Matcher.reviewMisses(missed);
  $('miss').innerHTML=u.length?'<b>れんしゅうしよう</b><br>'+u.map(q=>esc(q.show)+(q.t=='k'?'（'+esc(q.ans.join('・'))+'）':'')).join('<br>'):'ぜんぶ たたけたね！すごい！';show('end');tone(660,.2);setTimeout(()=>tone(990,.4),200)}
 $('ver').textContent=APP_VER+'・'+APP_DATE;
 $('go').onclick=start;$('again').onclick=start;$('quit').onclick=end;$('home2').onclick=()=>show('home');

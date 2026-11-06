@@ -101,7 +101,7 @@ levels('フォールバック後 局←曲',lv=>M.matchJa(['曲'],'局',['きょ
 check('空の結果は前の表',appSrc.includes('return Object.keys(o).length?o:fb'));
 const loadBody=appSrc.slice(appSrc.indexOf('async function loadSheet'));
 check('offlineのときは語彙を差し替えない',loadBody.indexOf("throw 'offline'")>=0&&loadBody.indexOf("throw 'offline'")<loadBody.indexOf('bindLex()'));
-check('初期化とシート成功の両方で語彙を作る',appSrc.includes('function bindLex(){Matcher.setJaLexiconFromTable(DATA.k)}')&&appSrc.includes('DATA=d;bindLex();'));
+check('初期化とシート成功の両方で語彙を作る',appSrc.includes('function bindLex(){Matcher.setJaLexicon(Matcher.lexiconRows(S.mode,DATA.k,DATA.kt))}')&&appSrc.includes('DATA=d;bindLex();')&&appSrc.includes('bindLex();refreshHint();'));
 const html=fs.readFileSync(root+'/index.html','utf8');
 check('match.jsはapp.jsより先',html.indexOf('src="match.js"')>0&&html.indexOf('src="match.js"')<html.indexOf('src="app.js"'));
 
@@ -131,12 +131,12 @@ check('表示HTMLの照合',rendered.includes('照合: '+esc('局（きょく）
 check('ほかの候補',rendered.includes('ほか: '+esc('きょく')));
 check('単一候補にはほかを出さない',!M.renderMiss(['10'],[{t:'e',show:'ten',ans:[]}],esc).includes('ほか:'));
 check('認識結果を保存しない',(appSrc.match(/localStorage\.setItem\('([^']+)'/g)||[]).join()==="localStorage.setItem('moguraSet',localStorage.setItem('moguraSheet'");
-check('照合は最終の不正解だけ',appSrc.includes("H.innerHTML=Matcher.renderMiss(alts,moles.filter(m=>m.q).map(m=>({t:m.q.t,show:m.q.show,ans:m.q.ans})),esc)"));
+check('照合は最終の不正解だけ',appSrc.includes("H.innerHTML=Matcher.renderMiss(alts,moles.filter(m=>m.q&&!m.hit).map(m=>({t:m.q.t,show:m.q.show,ans:m.q.ans})),esc)"));
 
 const self={};
 vm.runInNewContext(fs.readFileSync(root+'/version.js','utf8'),{self});
-check('版はv6',self.APP_VER==='v6');
-check('更新日',self.APP_DATE==='2026/11/06');
+check('版はv6.1.1',self.APP_VER==='v6.1.1');
+check('更新日',self.APP_DATE==='2026/11/07');
 const sw=fs.readFileSync(root+'/sw.js','utf8');
 check('キャッシュ名はversion.js由来',sw.includes("importScripts('version.js')")&&sw.includes("const C='mogura-'+self.APP_VER"));
 check('古いキャッシュを消す',sw.includes('ks.filter(k=>k!=C)'));
@@ -145,9 +145,141 @@ const precache=sw.slice(sw.indexOf('F=['),sw.indexOf('];')+1);
 for(const f of ['version.js','index.html','app.js','match.js','words.js'])check('事前キャッシュ '+f,precache.includes(f));
 check('テストは事前キャッシュしない',!precache.includes('test.js'));
 const C='mogura-'+self.APP_VER;
-const kept=['mogura-v4','mogura-v5',C,'other-cache'].filter(k=>k===C);
-check('v6以外のキャッシュ名は破棄される',kept.length===1&&kept[0]==='mogura-v6');
+check('小数の版もキャッシュ名にそのまま入る',C==='mogura-v6.1.1'&&C!=='mogura-v6'&&C!=='mogura-v6.1'&&C!=='mogura-v7');
+const kept=['mogura-v5','mogura-v6','mogura-v6.1','mogura-v7',C,'other-cache'].filter(k=>k===C);
+check('v6.1.1以外のキャッシュ名は破棄される',kept.length===1&&kept[0]==='mogura-v6.1.1');
 check('画面の折り返し',html.includes('#heard .missd')&&html.includes('overflow-wrap:anywhere'));
+check('設定に漢字テスト用がある',html.includes('value="ktest">漢字テスト用</option>')&&html.includes('id="ktestNote"'));
+
+// 漢字テスト用。公開シートには書かず、ここだけの文字列で確かめる
+const testStart=appSrc.indexOf('function normHead');
+const testEnd=appSrc.indexOf('return out}',testStart);
+if(testStart<0||testEnd<0)throw new Error('parseTestSheet not found');
+const testBox={};
+vm.runInNewContext(prelude+'\n'+appSrc.slice(testStart,testEnd+'return out}'.length)+'\nglobalThis.parseTestSheet=parseTestSheet;',testBox);
+const parseTest=testBox.parseTestSheet;
+const headerOnly='"漢字","読み"\n';
+check('見出しだけは0件',parseTest(headerOnly).length===0);
+check('空文字は0件',parseTest('').length===0&&parseTest('\n\n').length===0);
+const sample=['漢字,読み','','木,"き、もく"',',よみなし','花,','漢字,読み','水,"みず、すい"','語,ことば,余分','word,readings','猫,ねこ'].join('\n');
+const sampleRows=parseTest(sample);
+check('空行と読み欠落を捨てる',sampleRows.length===4);
+check('読点とカンマの複数読み',sampleRows[0][0]==='木'&&sampleRows[0][1].join(',')==='き,もく');
+check('水は二つの読み',sampleRows[1][0]==='水'&&sampleRows[1][1].join(',')==='みず,すい');
+check('余分な列は読みにしない',sampleRows[2][0]==='語'&&sampleRows[2][1].join()==='ことば');
+check('word/readings見出し',sampleRows.some(([w,r])=>w==='猫'&&r.join()==='ねこ'));
+const swapped=parseTest('読み,漢字\nはな,花\n');
+check('列が逆でも読む',swapped.length===1&&swapped[0][0]==='花'&&swapped[0][1].join()==='はな');
+check('見出し語そのものは問題にしない',!sampleRows.some(([w])=>w==='漢字'||w==='word'||w==='読み'));
+const paren=parseTest('漢字,読み（ひらがな）\n日,ひ、にち\n');
+check('括弧つき見出し',paren.length===1&&paren[0][0]==='日'&&paren[0][1].join(',')==='ひ,にち');
+const noHead=parseTest('漢字,かんじ\n');
+check('見出しが無ければ1行目も問題',noHead.length===1&&noHead[0][1].join()==='かんじ');
+
+const prevKt=[['旧',['ふるい']]];
+check('失敗は前回のテストを残す',M.nextKt(false,[],prevKt)===prevKt);
+const cleared=M.nextKt(true,[],prevKt);
+check('成功した空表は前回を消す',Array.isArray(cleared)&&cleared.length===0&&cleared!==prevKt);
+const replaced=M.nextKt(true,[['木',['き']]],prevKt);
+check('成功した表は入れ替える',replaced.length===1&&replaced[0][0]==='木');
+check('テスト取得は空でもフォールバックしない',appSrc.includes('Matcher.nextKt(ktOk,ktOk?parseTestSheet(kt.value):[],DATA.kt)')&&appSrc.includes("['漢字','英語','ショートセンテンス','漢字テスト用']"));
+check('通常3タブの空結果は従来どおり残す',appSrc.includes('return Object.keys(o).length?o:fb'));
+check('通信失敗かつテストも失敗なら保存しない',loadBody.includes("if(k.status!='fulfilled'&&e.status!='fulfilled'&&!ktOk)throw 'offline'"));
+check('メインが落ちても漢字・英語の表は維持',loadBody.includes('if(mainOff){d.k=DATA.k;d.e=DATA.e;d.s=DATA.s}'));
+check('古い保存にktが無くても配列にする',appSrc.includes('if(!Array.isArray(DATA.kt))DATA.kt=[]'));
+check('テストモードはテストの問題だけ',appSrc.includes("if(S.mode==='ktest')return Matcher.kanjiQuestions(DATA.kt);"));
+const qs=M.kanjiQuestions([['木',['き','もく']],['',[]],null,['花',['はな']]]);
+check('問題化で空行を捨てる',qs.length===2&&qs[0].show==='木'&&qs[0].t==='k'&&qs[0].ans.join()==='き,もく'&&qs[1].show==='花');
+check('0件の案内を出して通常漢字では始めない',appSrc.includes(KTEST_HINT_SRC())&&appSrc.includes("if(S.mode==='ktest'&&!P.length){$('warn').textContent=KTEST_HINT;show('home');return}"));
+
+function KTEST_HINT_SRC(){return '「漢字テスト用」のシートに、A列へ漢字、B列へ読みを入れてね（1行目は見出しです）'}
+
+M.setJaLexicon(M.lexiconRows('kanji',builtin,[['箸',['はし']],[ '曲',['きょく','くせ'] ]]));
+levels('通常モードはテスト用の箸を使わない',lv=>M.matchJa(['箸'],'橋',['はし'],lv),false);
+levels('通常モードはテスト用の読み追加で曲を壊さない',lv=>M.matchJa(['曲'],'局',['きょく'],lv),true);
+M.setJaLexicon(M.lexiconRows('ktest',builtin,[['箸',['はし']]]));
+levels('テストモードでは箸←はしの橋',lv=>M.matchJa(['箸'],'橋',['はし'],lv),true);
+levels('テストモードでも標準の局←曲',lv=>M.matchJa(['曲'],'局',['きょく'],lv),true);
+M.setJaLexicon(M.lexiconRows('ktest',builtin,[['曲',['きょく','くせ']]]));
+levels('テストで曲に別読みを足すと複数読みで除外',lv=>M.matchJa(['曲'],'局',['きょく'],lv),false);
+M.setJaLexicon(M.lexiconRows('ktest',builtin,[['球',['きゅう']]]));
+levels('標準の複数読みはテストの一つ読みと合流しても除外',lv=>M.matchJa(['球'],'究',['きゅう'],lv),false);
+const onlyTest={};
+M.setJaLexicon(M.lexiconRows('ktest',onlyTest,[['局',['きょく']],['曲',['きょく']],['球',['たま','きゅう']],['父',['ちち','とう']],['等',['とう']]]));
+levels('テスト表だけの局←曲',lv=>M.matchJa(['曲'],'局',['きょく'],lv),true);
+levels('テスト表だけの局←きょく',lv=>M.matchJa(['きょく'],'局',['きょく'],lv),true);
+levels('テスト表だけの球はきゅうの別表記にならない',lv=>M.matchJa(['球'],'究',['きゅう'],lv),false);
+levels('テスト表の父は等に当たらない',lv=>M.matchJa(['父'],'等',['とう'],lv),false);
+levels('テスト表の等は父のとうに当たる',lv=>M.matchJa(['等'],'父',['ちち','とう'],lv),true);
+
+// 復習欄: その回で出題され、正解できなかったものだけ
+check('正解直後は穴を塞いだまま',M.moleOpen({q:{show:'発見'},hit:true})===false);
+check('空の穴だけが空き',M.moleOpen({q:null,hit:false})===true&&M.moleOpen(null)===false);
+check('未回答だけがミス',M.countsAsMiss({q:{show:'式'},hit:false})===true);
+check('正解済みはミスにしない',M.countsAsMiss({q:{show:'式'},hit:true})===false);
+check('空はミスにしない',M.countsAsMiss({q:null})===false);
+const shown=[{t:'k',show:'式',ans:['しき']},{t:'k',show:'丁寧',ans:['ていねい']},{t:'k',show:'式',ans:['しき']},{t:'e',show:'ten',ans:[]}];
+const rev=M.reviewMisses(shown);
+check('復習は出題済みの重複なし',rev.map(q=>q.show).join(',')==='式,丁寧,ten');
+check('未出題の発見を足さない',!rev.some(q=>q.show==='発見'));
+check('空の復習',M.reviewMisses([]).length===0&&M.reviewMisses(null).length===0);
+check('英単語と文もそのまま',M.reviewMisses([{t:'s',show:'I am ten.',ans:[]}])[0].show==='I am ten.');
+
+function makeRace(){
+ const missed=[];const moles=[{q:null,hit:false,up:false,to:null}];
+ const timers=[];let now=0;
+ const schedule=(ms,fn)=>{const t={at:now+ms,fn,dead:false};timers.push(t);return t};
+ const clear=t=>{if(t)t.dead=true};
+ function down(m){m.q=null;m.hit=false;m.up=false;clear(m.to);m.to=null}
+ function spawn(word){
+  const free=moles.filter(M.moleOpen);if(!free.length)return false;
+  const m=free[0];m.hit=false;m.q={t:'k',show:word,ans:[word]};m.up=true;clear(m.to);
+  m.to=schedule(5000,()=>{if(M.countsAsMiss(m)){missed.push(m.q);down(m)}});return true}
+ function hit(){const m=moles[0];clear(m.to);m.to=null;m.hit=true;schedule(400,()=>down(m))}
+ function endGame(){moles.forEach(m=>{if(M.countsAsMiss(m))missed.push(m.q);down(m)})}
+ function tick(ms){now+=ms;for(const t of timers){if(!t.dead&&t.at<=now){t.dead=true;t.fn()}}}
+ function reset(){missed.length=0;moles[0]={q:null,hit:false,up:false,to:null};timers.length=0;now=0}
+ return {missed,moles,spawn,hit,endGame,tick,reset,shows:()=>M.reviewMisses(missed).map(q=>q.show)};
+}
+const raceHit=makeRace();
+raceHit.spawn('式');raceHit.hit();
+check('修正後は正解直後に発見を入れない',raceHit.spawn('発見')===false);
+raceHit.tick(400);raceHit.tick(5000);
+check('修正後のタイムアウト復習に発見が無い',raceHit.shows().join()===''&&!raceHit.moles[0].up&&!raceHit.moles[0].q);
+const raceFlow=makeRace();
+raceFlow.spawn('丁寧');raceFlow.tick(5000);raceFlow.spawn('速い');raceFlow.endGame();
+check('タイムアウトと終了時の未回答だけ復習',raceFlow.shows().join()==='丁寧,速い');
+raceFlow.reset();raceFlow.spawn('発見');raceFlow.hit();raceFlow.tick(400);raceFlow.endGame();
+check('連続プレイで前の発見を持ち越さない',raceFlow.shows().join()==='');
+const raceQuit=makeRace();
+raceQuit.spawn('式');raceQuit.endGame();
+check('やめる時も見えていた式は復習へ',raceQuit.shows().join()==='式');
+const raceAll=makeRace();
+raceAll.spawn('丁寧');raceAll.hit();raceAll.tick(400);raceAll.endGame();
+check('全問正解なら復習は空',raceAll.shows().join()==='');
+const raceEng=makeRace();
+raceEng.moles[0].q={t:'e',show:'ten',ans:[]};raceEng.moles[0].hit=false;raceEng.endGame();
+check('英語モードの未回答も復習',raceEng.shows().join()==='ten');
+const raceSent=makeRace();
+raceSent.moles[0].q={t:'s',show:'I am ten.',ans:[]};raceSent.moles[0].hit=false;raceSent.endGame();
+check('文モードの未回答も復習',raceSent.shows().join()==='I am ten.');
+const raceKt=makeRace();
+raceKt.moles[0].q={t:'k',show:'木',ans:['き','もく']};raceKt.moles[0].hit=false;raceKt.endGame();
+check('漢字テスト用の未回答も復習',raceKt.shows().join()==='木');
+const raceNone=makeRace();
+raceNone.endGame();
+check('無出題なら復習は空',raceNone.shows().join()==='');
+
+check('終了時は未回答の出題だけ復習へ',appSrc.includes('if(Matcher.countsAsMiss(m))missed.push(m.q)'));
+check('正解後はqを残してからdown',appSrc.includes('m.hit=true;const mm=m;setTimeout(()=>down(mm),400)'));
+check('空き穴判定はmoleOpen',appSrc.includes('moles.filter(Matcher.moleOpen)'));
+check('開始時に時計と前回を止める',appSrc.includes('function stopClocks()')&&appSrc.includes('stopClocks();if(running)'));
+check('復習表示はreviewMisses',appSrc.includes('const u=Matcher.reviewMisses(missed)'));
+check('認識の照合もhitを除く',appSrc.includes('moles.some(m=>m.q&&!m.hit)')&&appSrc.includes('moles.filter(m=>m.q&&!m.hit)'));
+
+for(const mode of ['kanji','eng','sent','emix','mix','ktest']){
+ check('モード記号 '+mode,appSrc.includes("'"+mode+"'")||html.includes('value="'+mode+'"'));
+}
 
 if(fail){console.error(ok+' ok, '+fail+' failed');process.exit(1)}
 console.log(ok+' ok');
