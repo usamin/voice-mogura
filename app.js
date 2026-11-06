@@ -27,11 +27,14 @@ function parseTab(text){const out={};csv(text).forEach(([g,w,r,en])=>{g=gradeOf(
  if(String(en||'').trim().toUpperCase()=='FALSE')return;(out[g]=out[g]||[]).push([w,splitR(r)])});return out}
 let DATA={k:{},e:{}};for(const g in KANJI)DATA.k[g]=KANJI[g].map(([k,r])=>[k,r.split(',')]);for(const g in ENG)DATA.e[g]=ENG[g].map(w=>[w,[]]);DATA.s={1:SENT.map(w=>[w,[]])};const BUILTIN_S=DATA.s;
 try{const c=JSON.parse(localStorage.getItem('moguraSheet')||'null');if(c&&c.k&&c.e)DATA=Object.assign({s:BUILTIN_S},c)}catch(e){}
+// 同音の別表記は、いまの学年だけでなく読み込まれた漢字表ぜんぶで判定する（シート更新後もここを通す）
+function bindLex(){Matcher.setJaLexiconFromTable(DATA.k)}
+bindLex();
 async function loadSheet(){try{const ctl=new AbortController();setTimeout(()=>ctl.abort(),6000);
  const [k,e,st]=await Promise.allSettled(['漢字','英語','ショートセンテンス'].map(t=>fetch(sheetURL(t),{cache:'no-store',signal:ctl.signal}).then(r=>{if(!r.ok)throw r.status;return r.text()})));
  const tab=(x,fb)=>{if(x.status!='fulfilled')return fb;const o=parseTab(x.value);return Object.keys(o).length?o:fb};
  const d={k:tab(k,DATA.k),e:tab(e,DATA.e),s:tab(st,DATA.s)};if(k.status!='fulfilled'&&e.status!='fulfilled')throw 'offline';
- DATA=d;localStorage.setItem('moguraSheet',JSON.stringify(d));$('warn').textContent=''}catch(err){console.warn('sheet',err)}}
+ DATA=d;bindLex();localStorage.setItem('moguraSheet',JSON.stringify(d));$('warn').textContent=''}catch(err){console.warn('sheet',err)}}
 const sheetReady=loadSheet();
 const upTo=n=>S.lower?[...Array(n).keys()].map(i=>i+1):[n];
 // モード: kanji=漢字 / eng=英単語 / sent=英文 / emix=英単語+英文 / mix=漢字+英単語
@@ -78,7 +81,7 @@ function listen(){if(!running||!SR)return;rec=new SR();rec.lang=lang;rec.interim
  rec.onresult=e=>{for(let i=e.resultIndex;i<e.results.length;i++){const r=e.results[i],alts=[];for(let j=0;j<r.length;j++)alts.push(r[j].transcript);
   const hits=check(alts),H=$('heard');
   if(hits.length){H.innerHTML='きこえた「'+esc(alts[0])+'」<br><b class="okc">⭕ '+hits.map(esc).join('・')+' に あたり！</b>';try{rec.abort()}catch(x){}}
-  else if(r.isFinal&&moles.some(m=>m.q)){H.innerHTML='きこえた「'+esc(alts[0])+'」<br><b class="ngc">❌ どのモグラとも ちがうよ</b>';sMiss()}
+  else if(r.isFinal&&moles.some(m=>m.q)){H.innerHTML=Matcher.renderMiss(alts,moles.filter(m=>m.q).map(m=>({t:m.q.t,show:m.q.show,ans:m.q.ans})),esc);sMiss()}
   else H.innerHTML='きこえた「'+esc(alts[0])+'」…'}};
  rec.onerror=e=>{if(e.error=='not-allowed'||e.error=='service-not-allowed'){$('mic').textContent='⚠️ マイクがきょかされていません';running&&end()}};
  rec.onend=()=>{if(running)setTimeout(listen,150)};try{rec.start()}catch(e){setTimeout(listen,500)}}
