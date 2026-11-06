@@ -135,8 +135,8 @@ check('照合は最終の不正解だけ',appSrc.includes("H.innerHTML=Matcher.r
 
 const self={};
 vm.runInNewContext(fs.readFileSync(root+'/version.js','utf8'),{self});
-check('版はv7',self.APP_VER==='v7');
-check('更新日',self.APP_DATE==='2026/11/06');
+check('版はv6.1.1',self.APP_VER==='v6.1.1');
+check('更新日',self.APP_DATE==='2026/11/07');
 const sw=fs.readFileSync(root+'/sw.js','utf8');
 check('キャッシュ名はversion.js由来',sw.includes("importScripts('version.js')")&&sw.includes("const C='mogura-'+self.APP_VER"));
 check('古いキャッシュを消す',sw.includes('ks.filter(k=>k!=C)'));
@@ -145,8 +145,9 @@ const precache=sw.slice(sw.indexOf('F=['),sw.indexOf('];')+1);
 for(const f of ['version.js','index.html','app.js','match.js','words.js'])check('事前キャッシュ '+f,precache.includes(f));
 check('テストは事前キャッシュしない',!precache.includes('test.js'));
 const C='mogura-'+self.APP_VER;
-const kept=['mogura-v5','mogura-v6',C,'other-cache'].filter(k=>k===C);
-check('v7以外のキャッシュ名は破棄される',kept.length===1&&kept[0]==='mogura-v7');
+check('小数の版もキャッシュ名にそのまま入る',C==='mogura-v6.1.1'&&C!=='mogura-v6'&&C!=='mogura-v6.1'&&C!=='mogura-v7');
+const kept=['mogura-v5','mogura-v6','mogura-v6.1','mogura-v7',C,'other-cache'].filter(k=>k===C);
+check('v6.1.1以外のキャッシュ名は破棄される',kept.length===1&&kept[0]==='mogura-v6.1.1');
 check('画面の折り返し',html.includes('#heard .missd')&&html.includes('overflow-wrap:anywhere'));
 check('設定に漢字テスト用がある',html.includes('value="ktest">漢字テスト用</option>')&&html.includes('id="ktestNote"'));
 
