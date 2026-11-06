@@ -43,11 +43,32 @@ function sentScore(heard,target,lv=1){const tw=sTok(target),used=new Set();if(!t
  tw.forEach(w=>{const i=ht.findIndex((t,k)=>!used.has(k)&&(t==w||(lv<2&&(SOUND[w]||[]).includes(t))||closeWord(t,w,lv)));if(i>=0){used.add(i);ok++}});return ok/tw.length}
 function matchSent(alts,sent,extra=[],lv=1){const need=RATE[lv]??.8;
  return alts.some(a=>[sent,...extra].some(t=>sentScore(a,t,lv)>=need-1e-9))}
+// 読みがちょうど一つの表記だけを、その読みへ対応づける。複数読みの字は入れない
+let jaOne=new Map();
+const readParts=raw=>Array.isArray(raw)?raw:String(raw??'').split(/[、,，\/／]/);
+function setJaLexicon(rows){const acc=new Map();
+ for(const row of rows||[]){if(!row)continue;const surface=normJa(row[0]);if(!surface)continue;
+  let set=acc.get(surface);if(!set){set=new Set();acc.set(surface,set)}
+  for(const item of readParts(row[1]))for(const part of String(item??'').split(/[、,，\/／]/)){const n=normJa(part);if(n)set.add(n)}}
+ jaOne=new Map();for(const [surface,set] of acc)if(set.size===1)jaOne.set(surface,[...set][0])}
+function setJaLexiconFromTable(table){const rows=[];if(table)for(const g of Object.keys(table))for(const row of table[g]||[])rows.push(row);setJaLexicon(rows)}
+function safeHomophone(n,ans){const r=jaOne.get(n);return !!r&&ans.includes(r)}
 function matchJa(alts,show,readings,lv=1){const ans=readings.map(normJa).filter(Boolean),sh=normJa(show);
  return alts.some(a=>{const n=normJa(a);if(!n)return false;
+  if(safeHomophone(n,ans))return true;
   if(lv>=2)return n==sh||ans.includes(n); // きびしい: その言葉だけを よむ
   if(n.includes(sh)||ans.some(r=>n.includes(r)))return true;
   // やさしい: 読みの一部（2文字以上）や1文字ちがいもOK
   return lv<=0&&ans.some(r=>(n.length>=2&&r.includes(n)&&n.length>=r.length/2)||(r.length>=3&&lev(n,r)<=1))})}
-G.Matcher={matchEn,matchJa,matchSent,sentScore,normJa,lev};
+function missDetail(alts,prompts){const heard=[];
+ for(const a of alts||[]){const s=String(a??'').trim();if(s&&!heard.includes(s))heard.push(s)}
+ const targets=(prompts||[]).map(p=>{const show=String(p.show??'');const ans=(p.ans||[]).map(x=>String(x).trim()).filter(Boolean);
+  return p.t==='k'&&ans.length?show+'（'+ans.join('・')+'）':show}).filter(Boolean);
+ return {heard,targets}}
+function renderMiss(alts,prompts,escFn){const esc=escFn||(s=>String(s)),d=missDetail(alts,prompts);
+ return 'きこえた「'+esc(d.heard[0]||'')+'」'
+  +(d.heard.length>1?'<br><span class="missd">ほか: '+esc(d.heard.slice(1).join(' / '))+'</span>':'')
+  +'<br><b class="ngc">❌ どのモグラとも ちがうよ</b>'
+  +'<br><span class="missd">照合: '+esc(d.targets.join(' / '))+'</span>'}
+G.Matcher={matchEn,matchJa,matchSent,sentScore,normJa,lev,setJaLexicon,setJaLexiconFromTable,missDetail,renderMiss};
 })(typeof window!='undefined'?window:globalThis);
