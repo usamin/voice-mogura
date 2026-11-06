@@ -101,7 +101,7 @@ levels('フォールバック後 局←曲',lv=>M.matchJa(['曲'],'局',['きょ
 check('空の結果は前の表',appSrc.includes('return Object.keys(o).length?o:fb'));
 const loadBody=appSrc.slice(appSrc.indexOf('async function loadSheet'));
 check('offlineのときは語彙を差し替えない',loadBody.indexOf("throw 'offline'")>=0&&loadBody.indexOf("throw 'offline'")<loadBody.indexOf('bindLex()'));
-check('初期化とシート成功の両方で語彙を作る',appSrc.includes('function bindLex(){Matcher.setJaLexiconFromTable(DATA.k)}')&&appSrc.includes('DATA=d;bindLex();'));
+check('初期化とシート成功の両方で語彙を作る',appSrc.includes('function bindLex(){Matcher.setJaLexicon(Matcher.lexiconRows(S.mode,DATA.k,DATA.kt))}')&&appSrc.includes('DATA=d;bindLex();')&&appSrc.includes('bindLex();refreshHint();'));
 const html=fs.readFileSync(root+'/index.html','utf8');
 check('match.jsはapp.jsより先',html.indexOf('src="match.js"')>0&&html.indexOf('src="match.js"')<html.indexOf('src="app.js"'));
 
@@ -135,7 +135,7 @@ check('照合は最終の不正解だけ',appSrc.includes("H.innerHTML=Matcher.r
 
 const self={};
 vm.runInNewContext(fs.readFileSync(root+'/version.js','utf8'),{self});
-check('版はv6',self.APP_VER==='v6');
+check('版はv7',self.APP_VER==='v7');
 check('更新日',self.APP_DATE==='2026/11/06');
 const sw=fs.readFileSync(root+'/sw.js','utf8');
 check('キャッシュ名はversion.js由来',sw.includes("importScripts('version.js')")&&sw.includes("const C='mogura-'+self.APP_VER"));
@@ -145,9 +145,71 @@ const precache=sw.slice(sw.indexOf('F=['),sw.indexOf('];')+1);
 for(const f of ['version.js','index.html','app.js','match.js','words.js'])check('事前キャッシュ '+f,precache.includes(f));
 check('テストは事前キャッシュしない',!precache.includes('test.js'));
 const C='mogura-'+self.APP_VER;
-const kept=['mogura-v4','mogura-v5',C,'other-cache'].filter(k=>k===C);
-check('v6以外のキャッシュ名は破棄される',kept.length===1&&kept[0]==='mogura-v6');
+const kept=['mogura-v5','mogura-v6',C,'other-cache'].filter(k=>k===C);
+check('v7以外のキャッシュ名は破棄される',kept.length===1&&kept[0]==='mogura-v7');
 check('画面の折り返し',html.includes('#heard .missd')&&html.includes('overflow-wrap:anywhere'));
+check('設定に漢字テスト用がある',html.includes('value="ktest">漢字テスト用</option>')&&html.includes('id="ktestNote"'));
+
+// 漢字テスト用。公開シートには書かず、ここだけの文字列で確かめる
+const testStart=appSrc.indexOf('function normHead');
+const testEnd=appSrc.indexOf('return out}',testStart);
+if(testStart<0||testEnd<0)throw new Error('parseTestSheet not found');
+const testBox={};
+vm.runInNewContext(prelude+'\n'+appSrc.slice(testStart,testEnd+'return out}'.length)+'\nglobalThis.parseTestSheet=parseTestSheet;',testBox);
+const parseTest=testBox.parseTestSheet;
+const headerOnly='"漢字","読み"\n';
+check('見出しだけは0件',parseTest(headerOnly).length===0);
+check('空文字は0件',parseTest('').length===0&&parseTest('\n\n').length===0);
+const sample=['漢字,読み','','木,"き、もく"',',よみなし','花,','漢字,読み','水,"みず、すい"','語,ことば,余分','word,readings','猫,ねこ'].join('\n');
+const sampleRows=parseTest(sample);
+check('空行と読み欠落を捨てる',sampleRows.length===4);
+check('読点とカンマの複数読み',sampleRows[0][0]==='木'&&sampleRows[0][1].join(',')==='き,もく');
+check('水は二つの読み',sampleRows[1][0]==='水'&&sampleRows[1][1].join(',')==='みず,すい');
+check('余分な列は読みにしない',sampleRows[2][0]==='語'&&sampleRows[2][1].join()==='ことば');
+check('word/readings見出し',sampleRows.some(([w,r])=>w==='猫'&&r.join()==='ねこ'));
+const swapped=parseTest('読み,漢字\nはな,花\n');
+check('列が逆でも読む',swapped.length===1&&swapped[0][0]==='花'&&swapped[0][1].join()==='はな');
+check('見出し語そのものは問題にしない',!sampleRows.some(([w])=>w==='漢字'||w==='word'||w==='読み'));
+const paren=parseTest('漢字,読み（ひらがな）\n日,ひ、にち\n');
+check('括弧つき見出し',paren.length===1&&paren[0][0]==='日'&&paren[0][1].join(',')==='ひ,にち');
+const noHead=parseTest('漢字,かんじ\n');
+check('見出しが無ければ1行目も問題',noHead.length===1&&noHead[0][1].join()==='かんじ');
+
+const prevKt=[['旧',['ふるい']]];
+check('失敗は前回のテストを残す',M.nextKt(false,[],prevKt)===prevKt);
+const cleared=M.nextKt(true,[],prevKt);
+check('成功した空表は前回を消す',Array.isArray(cleared)&&cleared.length===0&&cleared!==prevKt);
+const replaced=M.nextKt(true,[['木',['き']]],prevKt);
+check('成功した表は入れ替える',replaced.length===1&&replaced[0][0]==='木');
+check('テスト取得は空でもフォールバックしない',appSrc.includes('Matcher.nextKt(ktOk,ktOk?parseTestSheet(kt.value):[],DATA.kt)')&&appSrc.includes("['漢字','英語','ショートセンテンス','漢字テスト用']"));
+check('通常3タブの空結果は従来どおり残す',appSrc.includes('return Object.keys(o).length?o:fb'));
+check('通信失敗かつテストも失敗なら保存しない',loadBody.includes("if(k.status!='fulfilled'&&e.status!='fulfilled'&&!ktOk)throw 'offline'"));
+check('メインが落ちても漢字・英語の表は維持',loadBody.includes('if(mainOff){d.k=DATA.k;d.e=DATA.e;d.s=DATA.s}'));
+check('古い保存にktが無くても配列にする',appSrc.includes('if(!Array.isArray(DATA.kt))DATA.kt=[]'));
+check('テストモードはテストの問題だけ',appSrc.includes("if(S.mode==='ktest')return Matcher.kanjiQuestions(DATA.kt);"));
+const qs=M.kanjiQuestions([['木',['き','もく']],['',[]],null,['花',['はな']]]);
+check('問題化で空行を捨てる',qs.length===2&&qs[0].show==='木'&&qs[0].t==='k'&&qs[0].ans.join()==='き,もく'&&qs[1].show==='花');
+check('0件の案内を出して通常漢字では始めない',appSrc.includes(KTEST_HINT_SRC())&&appSrc.includes("if(S.mode==='ktest'&&!P.length){$('warn').textContent=KTEST_HINT;show('home');return}"));
+
+function KTEST_HINT_SRC(){return '「漢字テスト用」のシートに、A列へ漢字、B列へ読みを入れてね（1行目は見出しです）'}
+
+M.setJaLexicon(M.lexiconRows('kanji',builtin,[['箸',['はし']],[ '曲',['きょく','くせ'] ]]));
+levels('通常モードはテスト用の箸を使わない',lv=>M.matchJa(['箸'],'橋',['はし'],lv),false);
+levels('通常モードはテスト用の読み追加で曲を壊さない',lv=>M.matchJa(['曲'],'局',['きょく'],lv),true);
+M.setJaLexicon(M.lexiconRows('ktest',builtin,[['箸',['はし']]]));
+levels('テストモードでは箸←はしの橋',lv=>M.matchJa(['箸'],'橋',['はし'],lv),true);
+levels('テストモードでも標準の局←曲',lv=>M.matchJa(['曲'],'局',['きょく'],lv),true);
+M.setJaLexicon(M.lexiconRows('ktest',builtin,[['曲',['きょく','くせ']]]));
+levels('テストで曲に別読みを足すと複数読みで除外',lv=>M.matchJa(['曲'],'局',['きょく'],lv),false);
+M.setJaLexicon(M.lexiconRows('ktest',builtin,[['球',['きゅう']]]));
+levels('標準の複数読みはテストの一つ読みと合流しても除外',lv=>M.matchJa(['球'],'究',['きゅう'],lv),false);
+const onlyTest={};
+M.setJaLexicon(M.lexiconRows('ktest',onlyTest,[['局',['きょく']],['曲',['きょく']],['球',['たま','きゅう']],['父',['ちち','とう']],['等',['とう']]]));
+levels('テスト表だけの局←曲',lv=>M.matchJa(['曲'],'局',['きょく'],lv),true);
+levels('テスト表だけの局←きょく',lv=>M.matchJa(['きょく'],'局',['きょく'],lv),true);
+levels('テスト表だけの球はきゅうの別表記にならない',lv=>M.matchJa(['球'],'究',['きゅう'],lv),false);
+levels('テスト表の父は等に当たらない',lv=>M.matchJa(['父'],'等',['とう'],lv),false);
+levels('テスト表の等は父のとうに当たる',lv=>M.matchJa(['等'],'父',['ちち','とう'],lv),true);
 
 if(fail){console.error(ok+' ok, '+fail+' failed');process.exit(1)}
 console.log(ok+' ok');

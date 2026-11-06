@@ -51,7 +51,14 @@ function setJaLexicon(rows){const acc=new Map();
   let set=acc.get(surface);if(!set){set=new Set();acc.set(surface,set)}
   for(const item of readParts(row[1]))for(const part of String(item??'').split(/[、,，\/／]/)){const n=normJa(part);if(n)set.add(n)}}
  jaOne=new Map();for(const [surface,set] of acc)if(set.size===1)jaOne.set(surface,[...set][0])}
-function setJaLexiconFromTable(table){const rows=[];if(table)for(const g of Object.keys(table))for(const row of table[g]||[])rows.push(row);setJaLexicon(rows)}
+function setJaLexiconFromTable(table){setJaLexicon(lexiconRows('kanji',table,[]))}
+// 通常モードは漢字表だけ。漢字テスト用のときだけ、そのタブの表記も同音の辞書に足す
+function lexiconRows(mode,kTable,ktRows){const rows=[];
+ if(kTable)for(const g of Object.keys(kTable))for(const row of kTable[g]||[])rows.push(row);
+ if(mode==='ktest')for(const row of ktRows||[])rows.push(row);return rows}
+// 取得成功の空配列は前回を消す。失敗のときは前回を残す
+function nextKt(ok,rows,prev){return ok?(Array.isArray(rows)?rows:[]):(Array.isArray(prev)?prev:[])}
+function kanjiQuestions(rows){const out=[];for(const row of rows||[]){if(!row||!row[0]||!row[1]||!row[1].length)continue;out.push({t:'k',show:row[0],ans:row[1]})}return out}
 function safeHomophone(n,ans){const r=jaOne.get(n);return !!r&&ans.includes(r)}
 function matchJa(alts,show,readings,lv=1){const ans=readings.map(normJa).filter(Boolean),sh=normJa(show);
  return alts.some(a=>{const n=normJa(a);if(!n)return false;
@@ -70,5 +77,5 @@ function renderMiss(alts,prompts,escFn){const esc=escFn||(s=>String(s)),d=missDe
   +(d.heard.length>1?'<br><span class="missd">ほか: '+esc(d.heard.slice(1).join(' / '))+'</span>':'')
   +'<br><b class="ngc">❌ どのモグラとも ちがうよ</b>'
   +'<br><span class="missd">照合: '+esc(d.targets.join(' / '))+'</span>'}
-G.Matcher={matchEn,matchJa,matchSent,sentScore,normJa,lev,setJaLexicon,setJaLexiconFromTable,missDetail,renderMiss};
+G.Matcher={matchEn,matchJa,matchSent,sentScore,normJa,lev,setJaLexicon,setJaLexiconFromTable,lexiconRows,nextKt,kanjiQuestions,missDetail,renderMiss};
 })(typeof window!='undefined'?window:globalThis);

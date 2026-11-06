@@ -2,9 +2,11 @@ const $=id=>document.getElementById(id),show=s=>document.querySelectorAll('.scr'
 const DEF={grade:3,eLv:'same',mode:'kanji',time:60,speed:5000,lower:false,judge:1};
 let S=Object.assign({},DEF,JSON.parse(localStorage.getItem('moguraSet')||'{}'));
 for(let g=1;g<=6;g++)$('sGrade').innerHTML+=`<option value="${g}">${g}ねんせい</option>`;
-function loadSet(){$('sELv').value=S.eLv;$('sJudge').value=S.judge;$('sGrade').value=S.grade;$('sMode').value=S.mode;$('sTime').value=S.time;$('sSpeed').value=S.speed;$('sLower').checked=S.lower}
+function syncKtestNote(){const n=$('ktestNote');if(n)n.style.display=$('sMode').value==='ktest'?'block':'none'}
+function loadSet(){$('sELv').value=S.eLv;$('sJudge').value=S.judge;$('sGrade').value=S.grade;$('sMode').value=S.mode;$('sTime').value=S.time;$('sSpeed').value=S.speed;$('sLower').checked=S.lower;syncKtestNote()}
 $('toSet').onclick=()=>{loadSet();show('set')};
-$('save').onclick=()=>{S={eLv:$('sELv').value,judge:+$('sJudge').value,grade:+$('sGrade').value,mode:$('sMode').value,time:+$('sTime').value,speed:+$('sSpeed').value,lower:$('sLower').checked};localStorage.setItem('moguraSet',JSON.stringify(S));show('home')};
+$('sMode').onchange=syncKtestNote;
+$('save').onclick=()=>{S={eLv:$('sELv').value,judge:+$('sJudge').value,grade:+$('sGrade').value,mode:$('sMode').value,time:+$('sTime').value,speed:+$('sSpeed').value,lower:$('sLower').checked};localStorage.setItem('moguraSet',JSON.stringify(S));bindLex();refreshHint();show('home')};
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
 if(!SR)$('warn').textContent='このブラウザは おんせいにんしきに たいおうしていません（iPhoneはSafari、AndroidはChromeでひらいてね）';
 // audio
@@ -25,20 +27,39 @@ const splitR=s=>String(s||'').split(/[、,，\/／]/).map(x=>x.trim()).filter(Bo
 const gradeOf=g=>{g=String(g||'').trim();if(/^中/.test(g))return 7;if(/^高/.test(g))return 8;if(/^小/.test(g))return 1;return parseInt(g)};
 function parseTab(text){const out={};csv(text).forEach(([g,w,r,en])=>{g=gradeOf(g);w=(w||'').trim();if(!(g>=1&&g<=8)||!w)return;
  if(String(en||'').trim().toUpperCase()=='FALSE')return;(out[g]=out[g]||[]).push([w,splitR(r)])});return out}
-let DATA={k:{},e:{}};for(const g in KANJI)DATA.k[g]=KANJI[g].map(([k,r])=>[k,r.split(',')]);for(const g in ENG)DATA.e[g]=ENG[g].map(w=>[w,[]]);DATA.s={1:SENT.map(w=>[w,[]])};const BUILTIN_S=DATA.s;
-try{const c=JSON.parse(localStorage.getItem('moguraSheet')||'null');if(c&&c.k&&c.e)DATA=Object.assign({s:BUILTIN_S},c)}catch(e){}
-// 同音の別表記は、いまの学年だけでなく読み込まれた漢字表ぜんぶで判定する（シート更新後もここを通す）
-function bindLex(){Matcher.setJaLexiconFromTable(DATA.k)}
-bindLex();
+function normHead(s){return String(s||'').replace(/^\ufeff/,'').trim().toLowerCase().replace(/[（(].*$/,'').trim()}
+const TEST_K=['漢字','かんじ','kanji','word','words'];
+const TEST_R=['読み','よみ','readings','reading','yomi'];
+function parseTestSheet(text){const rows=csv(String(text||'').replace(/^\ufeff/,''));const out=[];
+ let i0=0;while(i0<rows.length&&rows[i0].every(c=>!String(c||'').trim()))i0++;if(i0>=rows.length)return out;
+ const head=rows[i0].map(normHead);const ki=head.findIndex(h=>TEST_K.includes(h)),ri=head.findIndex(h=>TEST_R.includes(h));
+ let colK=0,colR=1,start=i0;if(ki>=0&&ri>=0&&ki!==ri){colK=ki;colR=ri;start=i0+1}
+ for(let i=start;i<rows.length;i++){const row=rows[i]||[];const kanji=String(row[colK]||'').trim();const reading=String(row[colR]||'').trim();
+  if(!kanji||!reading)continue;const hk=normHead(kanji),hr=normHead(reading);
+  if(TEST_K.includes(hk)&&TEST_R.includes(hr)||TEST_R.includes(hk)&&TEST_K.includes(hr))continue;
+  const rs=splitR(reading);if(!rs.length)continue;out.push([kanji,rs])}
+ return out}
+let DATA={k:{},e:{},kt:[]};for(const g in KANJI)DATA.k[g]=KANJI[g].map(([k,r])=>[k,r.split(',')]);for(const g in ENG)DATA.e[g]=ENG[g].map(w=>[w,[]]);DATA.s={1:SENT.map(w=>[w,[]])};const BUILTIN_S=DATA.s;
+try{const c=JSON.parse(localStorage.getItem('moguraSheet')||'null');if(c&&c.k&&c.e){DATA=Object.assign({s:BUILTIN_S,kt:[]},c);if(!Array.isArray(DATA.kt))DATA.kt=[]}}catch(e){}
+// 同音の別表記は、いまの学年だけでなく読み込まれた漢字表ぜんぶ。漢字テスト用の表記は、そのモードのときだけ足す
+function bindLex(){Matcher.setJaLexicon(Matcher.lexiconRows(S.mode,DATA.k,DATA.kt))}
+const KTEST_HINT='「漢字テスト用」のシートに、A列へ漢字、B列へ読みを入れてね（1行目は見出しです）';
+function refreshHint(){if(!SR)return;$('warn').textContent=(S.mode==='ktest'&&!(DATA.kt&&DATA.kt.length))?KTEST_HINT:''}
+bindLex();refreshHint();
 async function loadSheet(){try{const ctl=new AbortController();setTimeout(()=>ctl.abort(),6000);
- const [k,e,st]=await Promise.allSettled(['漢字','英語','ショートセンテンス'].map(t=>fetch(sheetURL(t),{cache:'no-store',signal:ctl.signal}).then(r=>{if(!r.ok)throw r.status;return r.text()})));
+ const [k,e,st,kt]=await Promise.allSettled(['漢字','英語','ショートセンテンス','漢字テスト用'].map(t=>fetch(sheetURL(t),{cache:'no-store',signal:ctl.signal}).then(r=>{if(!r.ok)throw r.status;return r.text()})));
  const tab=(x,fb)=>{if(x.status!='fulfilled')return fb;const o=parseTab(x.value);return Object.keys(o).length?o:fb};
- const d={k:tab(k,DATA.k),e:tab(e,DATA.e),s:tab(st,DATA.s)};if(k.status!='fulfilled'&&e.status!='fulfilled')throw 'offline';
- DATA=d;bindLex();localStorage.setItem('moguraSheet',JSON.stringify(d));$('warn').textContent=''}catch(err){console.warn('sheet',err)}}
+ const ktOk=kt.status==='fulfilled',ktRows=Matcher.nextKt(ktOk,ktOk?parseTestSheet(kt.value):[],DATA.kt);
+ if(k.status!='fulfilled'&&e.status!='fulfilled'&&!ktOk)throw 'offline';
+ const mainOff=k.status!='fulfilled'&&e.status!='fulfilled';
+ const d={k:tab(k,DATA.k),e:tab(e,DATA.e),s:tab(st,DATA.s),kt:ktRows};
+ if(mainOff){d.k=DATA.k;d.e=DATA.e;d.s=DATA.s}
+ DATA=d;bindLex();localStorage.setItem('moguraSheet',JSON.stringify(d));refreshHint()}catch(err){console.warn('sheet',err)}}
 const sheetReady=loadSheet();
 const upTo=n=>S.lower?[...Array(n).keys()].map(i=>i+1):[n];
 // モード: kanji=漢字 / eng=英単語 / sent=英文 / emix=英単語+英文 / mix=漢字+英単語
-function pool(){const eg=S.eLv=='same'?S.grade:+S.eLv;let p=[];
+function pool(){if(S.mode==='ktest')return Matcher.kanjiQuestions(DATA.kt);
+ const eg=S.eLv=='same'?S.grade:+S.eLv;let p=[];
  if(S.mode=='kanji'||S.mode=='mix')upTo(Math.min(S.grade,6)).forEach(g=>(DATA.k[g]||[]).forEach(([k,r])=>p.push({t:'k',show:k,ans:r})));
  if(S.mode=='eng'||S.mode=='emix'||S.mode=='mix')upTo(eg).forEach(g=>(DATA.e[g]||[]).forEach(([w,r])=>p.push({t:'e',show:w,ans:r})));
  if(S.mode=='sent'||S.mode=='emix')Object.values(DATA.s||{}).flat().forEach(([w,r])=>p.push({t:'s',show:w,ans:r}));return p}
@@ -87,7 +108,7 @@ function listen(){if(!running||!SR)return;rec=new SR();rec.lang=lang;rec.interim
  rec.onend=()=>{if(running)setTimeout(listen,150)};try{rec.start()}catch(e){setTimeout(listen,500)}}
 const esc=s=>String(s).replace(/[&<>"]/g,c=>'&#'+c.charCodeAt(0)+';');
 async function start(){if(!SR){alert('おんせいにんしきが つかえません');return}
- AC=AC||new (window.AudioContext||window.webkitAudioContext)();AC.resume();$('heard').textContent='じゅんびちゅう…';await Promise.race([sheetReady,new Promise(r=>setTimeout(r,2500))]);P=pool();if(!P.length){alert('もんだいが ありません（せっていかシートを見てね）');return}score=0;left=S.time;missed=[];$('score').textContent=0;$('time').textContent=left;$('heard').textContent='…';
+ AC=AC||new (window.AudioContext||window.webkitAudioContext)();AC.resume();$('heard').textContent='じゅんびちゅう…';await Promise.race([sheetReady,new Promise(r=>setTimeout(r,2500))]);P=pool();if(S.mode==='ktest'&&!P.length){$('warn').textContent=KTEST_HINT;show('home');return}if(!P.length){alert('もんだいが ありません（せっていかシートを見てね）');return}score=0;left=S.time;missed=[];$('score').textContent=0;$('time').textContent=left;$('heard').textContent='…';
  build();show('game');running=true;lang=/eng|sent|emix/.test(S.mode)?'en-US':'ja-JP';mark();listen();spawn();
  timer=setInterval(()=>{$('time').textContent=--left;if(left<=0)end()},1000)}
 function end(){running=false;clearInterval(timer);clearTimeout(spawnT);moles.forEach(down);try{rec&&rec.abort()}catch(e){}
