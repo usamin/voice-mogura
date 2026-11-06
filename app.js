@@ -80,39 +80,44 @@ ${c.aura?`<ellipse class="glow" cx="120" cy="70" rx="115" ry="70" fill="url(#a${
 const DEFS='<svg width="0" height="0" style="position:absolute">'+[DRG.g,DRG.d].map(c=>`<defs><radialGradient id="a${c.id}"><stop offset="0" stop-color="#ffd600" stop-opacity=".8"/><stop offset="1" stop-color="#ffd600" stop-opacity="0"/></radialGradient><linearGradient id="b${c.id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${c.b1}"/><stop offset="1" stop-color="${c.b2}"/></linearGradient></defs>`).join('')+'</svg>';
 let moles=[],score,left,timer,spawnT,P,running=false,rec,lang,missed;
 function build(){$('field').innerHTML=DEFS;moles=[];for(let i=0;i<9;i++){const h=document.createElement('div');h.className='hole';h.innerHTML='<div class="mole"><div class="tg">👇 よんで！</div><div class="bub"></div><div class="w"></div><div class="f">• ᴥ •</div>'+dsvg(DRG.g)+dsvg(DRG.d)+'<span class="pts"></span><div class="fx"></div></div>';$('field').appendChild(h);moles.push({el:h.firstChild,q:null,to:0})}}
-function spawn(){if(!running)return;const free=moles.filter(m=>!m.q);const active=moles.filter(m=>m.q).length;
+function spawn(){if(!running)return;const free=moles.filter(Matcher.moleOpen);const active=moles.filter(m=>m.q).length;
  if(free.length&&active<(S.mode=='mix'?1:2)){const m=free[Math.random()*free.length|0];let q;
-  const cur=moles.find(x=>x.q);do q=P[Math.random()*P.length|0];while(cur&&(LG(q)!=LG(cur.q)||q.show==cur.q.show)&&P.some(x=>LG(x)==LG(cur.q)&&x.show!=cur.q.show));
+  const cur=moles.find(x=>x.q&&!x.hit);do q=P[Math.random()*P.length|0];while(cur&&(LG(q)!=LG(cur.q)||q.show==cur.q.show)&&P.some(x=>LG(x)==LG(cur.q)&&x.show!=cur.q.show));
   m.kind=(r=>r<.09?'g':r<.18?'d':'')(Math.random());m.el.classList.remove('dg','dd');if(m.kind)m.el.classList.add('d'+m.kind);m.el.querySelector('.pts').textContent=m.kind=='g'?'20':m.kind=='d'?'+2秒':'';
-  m.q=q;const W=m.el.querySelector('.w');W.textContent=q.show;W.classList.toggle('sent',q.t=='s');W.style.fontSize=q.t=='s'?(q.show.length>16?'11px':'13px'):q.show.length>9?'13px':q.show.length>6?'16px':'22px';m.el.classList.remove('hit');m.born=Date.now();m.el.classList.add('up');mark();sPop();
-  m.born=Date.now();m.to=setTimeout(()=>{if(m.q){missed.push(m.q);sMiss();down(m)}},q.t=='s'?S.speed*1.6:S.speed);setLang();}
+  m.hit=false;m.q=q;const W=m.el.querySelector('.w');W.textContent=q.show;W.classList.toggle('sent',q.t=='s');W.style.fontSize=q.t=='s'?(q.show.length>16?'11px':'13px'):q.show.length>9?'13px':q.show.length>6?'16px':'22px';m.el.classList.remove('hit');m.born=Date.now();m.el.classList.add('up');mark();sPop();
+  m.born=Date.now();m.to=setTimeout(()=>{if(Matcher.countsAsMiss(m)){missed.push(m.q);sMiss();down(m)}},q.t=='s'?S.speed*1.6:S.speed);setLang();}
  spawnT=setTimeout(spawn,900)}
-function down(m){m.q=null;m.el.classList.remove('up','target');clearTimeout(m.to);mark()}
+function down(m){m.q=null;m.hit=false;m.el.classList.remove('up','target');clearTimeout(m.to);m.to=0;mark()}
 // いちばん先に出たモグラを「ねらい」として光らせる（ほかのモグラも よめば たたける）
-function mark(){const up=moles.filter(x=>x.q).sort((a,b)=>a.born-b.born);moles.forEach(x=>x.el.classList.toggle('target',x==up[0]));const l=up[0]?LG(up[0].q):(lang=='en-US'?'e':'k');$('lang').textContent=l=='e'?'🔤 えいごで よんでね':'あ にほんごで よんでね';$('lang').className=l=='e'?'en':'ja'}
-function setLang(){const m=moles.find(x=>x.q);const want=m?(m.q.t!='k'?'en-US':'ja-JP'):lang;if(want!=lang){lang=want;if(rec)try{rec.abort()}catch(e){}}}
+function mark(){const up=moles.filter(x=>x.q&&!x.hit).sort((a,b)=>a.born-b.born);moles.forEach(x=>x.el.classList.toggle('target',x==up[0]));const l=up[0]?LG(up[0].q):(lang=='en-US'?'e':'k');$('lang').textContent=l=='e'?'🔤 えいごで よんでね':'あ にほんごで よんでね';$('lang').className=l=='e'?'en':'ja'}
+function setLang(){const m=moles.find(x=>x.q&&!x.hit);const want=m?(m.q.t!='k'?'en-US':'ja-JP'):lang;if(want!=lang){lang=want;if(rec)try{rec.abort()}catch(e){}}}
 // alts: 認識候補ぜんぶ。見えているモグラ全員と照らし合わせて、当たったモグラを返す
-function check(alts){const hits=[];moles.forEach(m=>{if(!m.q)return;
+function check(alts){const hits=[];moles.forEach(m=>{if(!m.q||m.hit)return;
  const J=S.judge??1,ok=m.q.t=='s'?Matcher.matchSent(alts,m.q.show,m.q.ans,J):m.q.t=='e'?Matcher.matchEn(alts,m.q.show,m.q.ans,J):Matcher.matchJa(alts,m.q.show,m.q.ans,J);
  if(ok){hits.push(m.q.show);score+=m.kind=='g'?20:10;if(m.kind=='d'){left+=2;$('time').textContent=left;const fx=m.el.querySelector('.fx');fx.textContent='+2びょう！';fx.classList.remove('on');void fx.offsetWidth;fx.classList.add('on')}$('score').textContent=score;m.el.classList.add('hit');m.el.classList.remove('target');sHit();
   const b=m.el.querySelector('.bub');b.textContent='⭕ '+alts[0];b.classList.add('on');setTimeout(()=>b.classList.remove('on'),900);
-  const mm=m;mm.q=null;clearTimeout(mm.to);setTimeout(()=>{mm.el.classList.remove('up');mark()},400)}});return hits}
+  // 正解しても消えるまで q を残す。すぐ空けると、隠れた穴に別の問題が入って復習に紛れ込む
+  clearTimeout(m.to);m.to=0;m.hit=true;const mm=m;setTimeout(()=>down(mm),400)}});return hits}
 function listen(){if(!running||!SR)return;rec=new SR();rec.lang=lang;rec.interimResults=true;rec.continuous=!/iPhone|iPad/.test(navigator.userAgent);rec.maxAlternatives=10;
  rec.onstart=()=>$('mic').textContent='🎤 きいてるよ（'+(lang=='ja-JP'?'にほんご':'えいご')+'）';
  rec.onresult=e=>{for(let i=e.resultIndex;i<e.results.length;i++){const r=e.results[i],alts=[];for(let j=0;j<r.length;j++)alts.push(r[j].transcript);
   const hits=check(alts),H=$('heard');
   if(hits.length){H.innerHTML='きこえた「'+esc(alts[0])+'」<br><b class="okc">⭕ '+hits.map(esc).join('・')+' に あたり！</b>';try{rec.abort()}catch(x){}}
-  else if(r.isFinal&&moles.some(m=>m.q)){H.innerHTML=Matcher.renderMiss(alts,moles.filter(m=>m.q).map(m=>({t:m.q.t,show:m.q.show,ans:m.q.ans})),esc);sMiss()}
+  else if(r.isFinal&&moles.some(m=>m.q&&!m.hit)){H.innerHTML=Matcher.renderMiss(alts,moles.filter(m=>m.q&&!m.hit).map(m=>({t:m.q.t,show:m.q.show,ans:m.q.ans})),esc);sMiss()}
   else H.innerHTML='きこえた「'+esc(alts[0])+'」…'}};
  rec.onerror=e=>{if(e.error=='not-allowed'||e.error=='service-not-allowed'){$('mic').textContent='⚠️ マイクがきょかされていません';running&&end()}};
  rec.onend=()=>{if(running)setTimeout(listen,150)};try{rec.start()}catch(e){setTimeout(listen,500)}}
 const esc=s=>String(s).replace(/[&<>"]/g,c=>'&#'+c.charCodeAt(0)+';');
+function stopClocks(){clearInterval(timer);timer=0;clearTimeout(spawnT);spawnT=0}
 async function start(){if(!SR){alert('おんせいにんしきが つかえません');return}
- AC=AC||new (window.AudioContext||window.webkitAudioContext)();AC.resume();$('heard').textContent='じゅんびちゅう…';await Promise.race([sheetReady,new Promise(r=>setTimeout(r,2500))]);P=pool();if(S.mode==='ktest'&&!P.length){$('warn').textContent=KTEST_HINT;show('home');return}if(!P.length){alert('もんだいが ありません（せっていかシートを見てね）');return}score=0;left=S.time;missed=[];$('score').textContent=0;$('time').textContent=left;$('heard').textContent='…';
+ AC=AC||new (window.AudioContext||window.webkitAudioContext)();AC.resume();$('heard').textContent='じゅんびちゅう…';await Promise.race([sheetReady,new Promise(r=>setTimeout(r,2500))]);P=pool();if(S.mode==='ktest'&&!P.length){$('warn').textContent=KTEST_HINT;show('home');return}if(!P.length){alert('もんだいが ありません（せっていかシートを見てね）');return}
+ stopClocks();if(running){running=false;moles.forEach(down);try{rec&&rec.abort()}catch(e){}}
+ score=0;left=S.time;missed=[];$('score').textContent=0;$('time').textContent=left;$('heard').textContent='…';
  build();show('game');running=true;lang=/eng|sent|emix/.test(S.mode)?'en-US':'ja-JP';mark();listen();spawn();
  timer=setInterval(()=>{$('time').textContent=--left;if(left<=0)end()},1000)}
-function end(){running=false;clearInterval(timer);clearTimeout(spawnT);moles.forEach(down);try{rec&&rec.abort()}catch(e){}
- $('final').textContent='⭐ '+score;const u=[...new Map(missed.map(q=>[q.show,q])).values()];
+function end(){if(!running&&!moles.some(m=>m.q)){show('end');return}running=false;stopClocks();
+ moles.forEach(m=>{if(Matcher.countsAsMiss(m))missed.push(m.q);down(m)});try{rec&&rec.abort()}catch(e){}
+ $('final').textContent='⭐ '+score;const u=Matcher.reviewMisses(missed);
  $('miss').innerHTML=u.length?'<b>れんしゅうしよう</b><br>'+u.map(q=>esc(q.show)+(q.t=='k'?'（'+esc(q.ans.join('・'))+'）':'')).join('<br>'):'ぜんぶ たたけたね！すごい！';show('end');tone(660,.2);setTimeout(()=>tone(990,.4),200)}
 $('ver').textContent=APP_VER+'・'+APP_DATE;
 $('go').onclick=start;$('again').onclick=start;$('quit').onclick=end;$('home2').onclick=()=>show('home');

@@ -131,7 +131,7 @@ check('表示HTMLの照合',rendered.includes('照合: '+esc('局（きょく）
 check('ほかの候補',rendered.includes('ほか: '+esc('きょく')));
 check('単一候補にはほかを出さない',!M.renderMiss(['10'],[{t:'e',show:'ten',ans:[]}],esc).includes('ほか:'));
 check('認識結果を保存しない',(appSrc.match(/localStorage\.setItem\('([^']+)'/g)||[]).join()==="localStorage.setItem('moguraSet',localStorage.setItem('moguraSheet'");
-check('照合は最終の不正解だけ',appSrc.includes("H.innerHTML=Matcher.renderMiss(alts,moles.filter(m=>m.q).map(m=>({t:m.q.t,show:m.q.show,ans:m.q.ans})),esc)"));
+check('照合は最終の不正解だけ',appSrc.includes("H.innerHTML=Matcher.renderMiss(alts,moles.filter(m=>m.q&&!m.hit).map(m=>({t:m.q.t,show:m.q.show,ans:m.q.ans})),esc)"));
 
 const self={};
 vm.runInNewContext(fs.readFileSync(root+'/version.js','utf8'),{self});
@@ -210,6 +210,75 @@ levels('テスト表だけの局←きょく',lv=>M.matchJa(['きょく'],'局',
 levels('テスト表だけの球はきゅうの別表記にならない',lv=>M.matchJa(['球'],'究',['きゅう'],lv),false);
 levels('テスト表の父は等に当たらない',lv=>M.matchJa(['父'],'等',['とう'],lv),false);
 levels('テスト表の等は父のとうに当たる',lv=>M.matchJa(['等'],'父',['ちち','とう'],lv),true);
+
+// 復習欄: その回で出題され、正解できなかったものだけ
+check('正解直後は穴を塞いだまま',M.moleOpen({q:{show:'発見'},hit:true})===false);
+check('空の穴だけが空き',M.moleOpen({q:null,hit:false})===true&&M.moleOpen(null)===false);
+check('未回答だけがミス',M.countsAsMiss({q:{show:'式'},hit:false})===true);
+check('正解済みはミスにしない',M.countsAsMiss({q:{show:'式'},hit:true})===false);
+check('空はミスにしない',M.countsAsMiss({q:null})===false);
+const shown=[{t:'k',show:'式',ans:['しき']},{t:'k',show:'丁寧',ans:['ていねい']},{t:'k',show:'式',ans:['しき']},{t:'e',show:'ten',ans:[]}];
+const rev=M.reviewMisses(shown);
+check('復習は出題済みの重複なし',rev.map(q=>q.show).join(',')==='式,丁寧,ten');
+check('未出題の発見を足さない',!rev.some(q=>q.show==='発見'));
+check('空の復習',M.reviewMisses([]).length===0&&M.reviewMisses(null).length===0);
+check('英単語と文もそのまま',M.reviewMisses([{t:'s',show:'I am ten.',ans:[]}])[0].show==='I am ten.');
+
+function makeRace(){
+ const missed=[];const moles=[{q:null,hit:false,up:false,to:null}];
+ const timers=[];let now=0;
+ const schedule=(ms,fn)=>{const t={at:now+ms,fn,dead:false};timers.push(t);return t};
+ const clear=t=>{if(t)t.dead=true};
+ function down(m){m.q=null;m.hit=false;m.up=false;clear(m.to);m.to=null}
+ function spawn(word){
+  const free=moles.filter(M.moleOpen);if(!free.length)return false;
+  const m=free[0];m.hit=false;m.q={t:'k',show:word,ans:[word]};m.up=true;clear(m.to);
+  m.to=schedule(5000,()=>{if(M.countsAsMiss(m)){missed.push(m.q);down(m)}});return true}
+ function hit(){const m=moles[0];clear(m.to);m.to=null;m.hit=true;schedule(400,()=>down(m))}
+ function endGame(){moles.forEach(m=>{if(M.countsAsMiss(m))missed.push(m.q);down(m)})}
+ function tick(ms){now+=ms;for(const t of timers){if(!t.dead&&t.at<=now){t.dead=true;t.fn()}}}
+ function reset(){missed.length=0;moles[0]={q:null,hit:false,up:false,to:null};timers.length=0;now=0}
+ return {missed,moles,spawn,hit,endGame,tick,reset,shows:()=>M.reviewMisses(missed).map(q=>q.show)};
+}
+const raceHit=makeRace();
+raceHit.spawn('式');raceHit.hit();
+check('修正後は正解直後に発見を入れない',raceHit.spawn('発見')===false);
+raceHit.tick(400);raceHit.tick(5000);
+check('修正後のタイムアウト復習に発見が無い',raceHit.shows().join()===''&&!raceHit.moles[0].up&&!raceHit.moles[0].q);
+const raceFlow=makeRace();
+raceFlow.spawn('丁寧');raceFlow.tick(5000);raceFlow.spawn('速い');raceFlow.endGame();
+check('タイムアウトと終了時の未回答だけ復習',raceFlow.shows().join()==='丁寧,速い');
+raceFlow.reset();raceFlow.spawn('発見');raceFlow.hit();raceFlow.tick(400);raceFlow.endGame();
+check('連続プレイで前の発見を持ち越さない',raceFlow.shows().join()==='');
+const raceQuit=makeRace();
+raceQuit.spawn('式');raceQuit.endGame();
+check('やめる時も見えていた式は復習へ',raceQuit.shows().join()==='式');
+const raceAll=makeRace();
+raceAll.spawn('丁寧');raceAll.hit();raceAll.tick(400);raceAll.endGame();
+check('全問正解なら復習は空',raceAll.shows().join()==='');
+const raceEng=makeRace();
+raceEng.moles[0].q={t:'e',show:'ten',ans:[]};raceEng.moles[0].hit=false;raceEng.endGame();
+check('英語モードの未回答も復習',raceEng.shows().join()==='ten');
+const raceSent=makeRace();
+raceSent.moles[0].q={t:'s',show:'I am ten.',ans:[]};raceSent.moles[0].hit=false;raceSent.endGame();
+check('文モードの未回答も復習',raceSent.shows().join()==='I am ten.');
+const raceKt=makeRace();
+raceKt.moles[0].q={t:'k',show:'木',ans:['き','もく']};raceKt.moles[0].hit=false;raceKt.endGame();
+check('漢字テスト用の未回答も復習',raceKt.shows().join()==='木');
+const raceNone=makeRace();
+raceNone.endGame();
+check('無出題なら復習は空',raceNone.shows().join()==='');
+
+check('終了時は未回答の出題だけ復習へ',appSrc.includes('if(Matcher.countsAsMiss(m))missed.push(m.q)'));
+check('正解後はqを残してからdown',appSrc.includes('m.hit=true;const mm=m;setTimeout(()=>down(mm),400)'));
+check('空き穴判定はmoleOpen',appSrc.includes('moles.filter(Matcher.moleOpen)'));
+check('開始時に時計と前回を止める',appSrc.includes('function stopClocks()')&&appSrc.includes('stopClocks();if(running)'));
+check('復習表示はreviewMisses',appSrc.includes('const u=Matcher.reviewMisses(missed)'));
+check('認識の照合もhitを除く',appSrc.includes('moles.some(m=>m.q&&!m.hit)')&&appSrc.includes('moles.filter(m=>m.q&&!m.hit)'));
+
+for(const mode of ['kanji','eng','sent','emix','mix','ktest']){
+ check('モード記号 '+mode,appSrc.includes("'"+mode+"'")||html.includes('value="'+mode+'"'));
+}
 
 if(fail){console.error(ok+' ok, '+fail+' failed');process.exit(1)}
 console.log(ok+' ok');

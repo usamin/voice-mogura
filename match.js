@@ -59,6 +59,12 @@ function lexiconRows(mode,kTable,ktRows){const rows=[];
 // 取得成功の空配列は前回を消す。失敗のときは前回を残す
 function nextKt(ok,rows,prev){return ok?(Array.isArray(rows)?rows:[]):(Array.isArray(prev)?prev:[])}
 function kanjiQuestions(rows){const out=[];for(const row of rows||[]){if(!row||!row[0]||!row[1]||!row[1].length)continue;out.push({t:'k',show:row[0],ans:row[1]})}return out}
+// 正解直後は q を残して穴を塞ぐ。非表示のまま別問題がタイムアウトで復習に入るのを防ぐ
+function moleOpen(m){return !!(m&&!m.q)}
+function countsAsMiss(m){return !!(m&&m.q&&!m.hit)}
+function reviewMisses(missed){const out=[];const seen=new Set();
+ for(const q of missed||[]){if(!q||q.show==null||q.show==='')continue;const k=String(q.show);if(seen.has(k))continue;seen.add(k);out.push(q)}
+ return out}
 function safeHomophone(n,ans){const r=jaOne.get(n);return !!r&&ans.includes(r)}
 function matchJa(alts,show,readings,lv=1){const ans=readings.map(normJa).filter(Boolean),sh=normJa(show);
  return alts.some(a=>{const n=normJa(a);if(!n)return false;
@@ -77,5 +83,5 @@ function renderMiss(alts,prompts,escFn){const esc=escFn||(s=>String(s)),d=missDe
   +(d.heard.length>1?'<br><span class="missd">ほか: '+esc(d.heard.slice(1).join(' / '))+'</span>':'')
   +'<br><b class="ngc">❌ どのモグラとも ちがうよ</b>'
   +'<br><span class="missd">照合: '+esc(d.targets.join(' / '))+'</span>'}
-G.Matcher={matchEn,matchJa,matchSent,sentScore,normJa,lev,setJaLexicon,setJaLexiconFromTable,lexiconRows,nextKt,kanjiQuestions,missDetail,renderMiss};
+G.Matcher={matchEn,matchJa,matchSent,sentScore,normJa,lev,setJaLexicon,setJaLexiconFromTable,lexiconRows,nextKt,kanjiQuestions,moleOpen,countsAsMiss,reviewMisses,missDetail,renderMiss};
 })(typeof window!='undefined'?window:globalThis);
