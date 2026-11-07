@@ -139,7 +139,7 @@ check('照合は最終の不正解だけ',appSrc.includes("H.innerHTML=Matcher.r
 
 const self={};
 vm.runInNewContext(fs.readFileSync(root+'/version.js','utf8'),{self});
-check('版はv6.1.2',self.APP_VER==='v6.1.2');
+check('版はv7.0.0',self.APP_VER==='v7.0.0');
 check('更新日',self.APP_DATE==='2026/11/07');
 const sw=fs.readFileSync(root+'/sw.js','utf8');
 check('キャッシュ名はversion.js由来',sw.includes("importScripts('version.js')")&&sw.includes("const C='mogura-'+self.APP_VER"));
@@ -149,9 +149,9 @@ const precache=sw.slice(sw.indexOf('F=['),sw.indexOf('];')+1);
 for(const f of ['version.js','index.html','app.js','match.js','yomi.js','words.js'])check('事前キャッシュ '+f,precache.includes(f));
 check('テストは事前キャッシュしない',!precache.includes('test.js'));
 const C='mogura-'+self.APP_VER;
-check('小数の版もキャッシュ名にそのまま入る',C==='mogura-v6.1.2'&&C!=='mogura-v6'&&C!=='mogura-v6.1'&&C!=='mogura-v6.1.1'&&C!=='mogura-v7');
-const kept=['mogura-v5','mogura-v6','mogura-v6.1','mogura-v6.1.1','mogura-v7',C,'other-cache'].filter(k=>k===C);
-check('v6.1.2以外のキャッシュ名は破棄される',kept.length===1&&kept[0]==='mogura-v6.1.2');
+check('小数の版もキャッシュ名にそのまま入る',C==='mogura-v7.0.0'&&C!=='mogura-v7'&&C!=='mogura-v6.1.2'&&C!=='mogura-v6.1.1');
+const kept=['mogura-v5','mogura-v6','mogura-v6.1','mogura-v6.1.1','mogura-v6.1.2','mogura-v7',C,'other-cache'].filter(k=>k===C);
+check('v7.0.0以外のキャッシュ名は破棄される',kept.length===1&&kept[0]==='mogura-v7.0.0');
 check('画面の折り返し',html.includes('#heard .missd')&&html.includes('overflow-wrap:anywhere'));
 check('設定に漢字テスト用がある',html.includes('value="ktest">漢字テスト用</option>')&&html.includes('id="ktestNote"'));
 
@@ -315,6 +315,54 @@ check('認識の照合もhitを除く',appSrc.includes('moles.some(m=>m.q&&!m.hi
 for(const mode of ['kanji','eng','sent','emix','mix','ktest']){
  check('モード記号 '+mode,appSrc.includes("'"+mode+"'")||html.includes('value="'+mode+'"'));
 }
+
+// はつおんチェック。一覧と判定のつなぎだけ。ゲームの得点・復習は変えない
+const pdata={k:{1:[['山',['やま','さん']]],3:[['駅',['えき']],['感想',['かんそう']]]},e:{1:[['cat',[]]],3:[['ten',[]]],8:[['ability',[]]]},s:{1:[['I like dogs.',[]]]},kt:[['感想',['かんそう']],['農作業',['のうさぎょう']]]};
+const only3=M.checkList('kanji',pdata,{grade:3,lower:false,eLv:'same'});
+check('漢字は今の学年だけ',only3.map(x=>x.show).join()==='駅,感想');
+check('漢字リストにテスト用だけは入らない',!only3.some(x=>x.show==='農作業'));
+const lowK=M.checkList('kanji',pdata,{grade:3,lower:true});
+check('漢字は下の学年も',lowK.map(x=>x.show).join()==='山,駅,感想');
+check('1年に駅は入らない',!M.checkList('kanji',pdata,{grade:1,lower:false}).some(x=>x.show==='駅'));
+check('学年8で下の学年なしなら6年だけ',M.checkList('kanji',{k:{6:[['雪',['ゆき']]],3:[['駅',['えき']]]}},{grade:8,lower:false}).map(x=>x.show).join()==='雪');
+const g8k=M.checkList('kanji',pdata,{grade:8,lower:true});
+check('高校の設定でも漢字は6年まで',g8k.some(x=>x.show==='駅')&&g8k.some(x=>x.show==='山')&&!g8k.some(x=>x.show==='ability'));
+const ktList=M.checkList('ktest',pdata,{grade:1,lower:true});
+check('テスト用は学年を見ない',ktList.map(x=>x.show).join()==='感想,農作業'&&ktList.every(x=>x.t==='k'));
+check('空のテスト用は0件',M.checkList('ktest',{kt:[]},{grade:3}).length===0);
+check('英語は学年と同じ',M.checkList('eng',pdata,{grade:1,eLv:'same',lower:false}).map(x=>x.show).join()==='cat');
+check('英語レベルは高校だけ',M.checkList('eng',pdata,{grade:1,eLv:'8',lower:false}).map(x=>x.show).join()==='ability');
+check('英語は下の学年も',M.checkList('eng',pdata,{grade:3,eLv:'same',lower:true}).map(x=>x.show).join()==='cat,ten');
+const sentList=M.checkList('sent',pdata,{grade:1});
+check('文は学年を見ない',sentList.length===1&&sentList[0].t==='s'&&sentList[0].show==='I like dogs.');
+check('未知の出題元は空',M.checkList('mix',pdata,{grade:3}).length===0);
+check('漢字の表示範囲',M.checkNote('kanji',{grade:3,lower:false})==='3ねんせい'&&M.checkNote('kanji',{grade:3,lower:true})==='1〜3ねんせい');
+check('英語と文とテスト用の表示範囲',M.checkNote('eng',{grade:1,eLv:'7'})==='中学'&&M.checkNote('eng',{grade:2,eLv:'same',lower:true})==='1〜2ねん'&&M.checkNote('sent',{})==='ぜんぶの文'&&M.checkNote('ktest',{grade:6})==='学年は使いません');
+check('読みでさがせる',M.filterCheckItems(ktList,'かんそう').map(x=>x.show).join()==='感想');
+check('表記でさがせる',M.filterCheckItems(lowK,'駅').length===1);
+check('空の検索はそのまま',M.filterCheckItems(ktList,'  ').length===2&&M.filterCheckItems(ktList,'').length===2);
+check('英語の検索',M.filterCheckItems(M.checkList('eng',pdata,{grade:3,eLv:'same',lower:true}),'Ten').map(x=>x.show).join()==='ten');
+check('文の検索は空白を無視',M.filterCheckItems(sentList,'likedogs').length===1);
+M.setJaLexicon(M.lexiconRows('ktest',builtin,[['感想',['かんそう']]]));
+const kanItem={t:'k',show:'感想',ans:['かんそう']};
+levels('チェック 感想←乾燥',lv=>M.judgeItem(kanItem,['乾燥','乾燥乾燥','炭素乾燥','酸素乾燥'],lv),true);
+levels('チェック 乾燥は猫に当たらない',lv=>M.judgeItem({t:'k',show:'猫',ans:['ねこ']},['乾燥'],lv),false);
+levels('チェックの厳しさはゲームと同じ',lv=>M.judgeItem({t:'k',show:'局',ans:['きょく']},['きょくです'],lv),[true,true,false]);
+levels('チェック ten←10',lv=>M.judgeItem({t:'e',show:'ten',ans:[]},['10'],lv),true);
+levels('チェック 文 I am ten.←I am 10.',lv=>M.judgeItem({t:'s',show:'I am ten.',ans:[]},['I am 10.'],lv),true);
+levels('チェック 関係ない英語',lv=>M.judgeItem({t:'e',show:'cat',ans:[]},['dog'],lv),false);
+const okHtml=M.renderCheck(['乾燥',' 乾燥乾燥 ','乾燥'],true,esc);
+check('せいかい表示',okHtml.includes('きこえた「乾燥」')&&okHtml.includes('○ せいかい')&&okHtml.includes('ほか: '+esc('乾燥乾燥')));
+const ngHtml=M.renderCheck(['ねこ'],false,esc);
+check('ちがう表示',ngHtml.includes('きこえた「ねこ」')&&ngHtml.includes('× ちがう')&&!ngHtml.includes('せいかい'));
+check('候補が無ければ空のきこえた',M.renderCheck([],false,esc).includes('きこえた「」')&&M.renderCheck([],false,esc).includes('× ちがう'));
+check('タイトルにボタンがある',html.includes('id="toCheck">はつおんチェック</button>')&&html.includes('id="pron"')&&html.includes('value="sent">ショートセンテンス</option>'));
+const pronSrc=appSrc.slice(appSrc.indexOf('function stopPrec'),appSrc.indexOf("$('toCheck')"));
+check('はつおんの処理がある',pronSrc.includes('function stopPrec')&&pronSrc.includes('Matcher.judgeItem')&&pronSrc.includes('Matcher.checkList')&&pronSrc.includes('Matcher.renderCheck')&&pronSrc.includes('ja-JP')&&pronSrc.includes('en-US'));
+check('はつおんは復習に足さない',!pronSrc.includes('missed')&&!pronSrc.includes('reviewMisses'));
+check('はつおんは得点とタイマーを変えない',!pronSrc.includes('score')&&!pronSrc.includes('spawn')&&!pronSrc.includes('moles')&&!pronSrc.includes('stopClocks'));
+check('厳しさは設定のまま',pronSrc.includes('S.judge??1'));
+check('ゲームの開始はそのまま',appSrc.includes("P=pool();if(S.mode==='ktest'&&!P.length)")&&appSrc.includes('const u=Matcher.reviewMisses(missed)'));
 
 if(fail){console.error(ok+' ok, '+fail+' failed');process.exit(1)}
 console.log(ok+' ok');

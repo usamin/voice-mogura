@@ -79,6 +79,29 @@ function countsAsMiss(m){return !!(m&&m.q&&!m.hit)}
 function reviewMisses(missed){const out=[];const seen=new Set();
  for(const q of missed||[]){if(!q||q.show==null||q.show==='')continue;const k=String(q.show);if(seen.has(k))continue;seen.add(k);out.push(q)}
  return out}
+// はつおんチェック。ゲームと同じ学年・英語レベル・下の学年・判定を使い、得点や復習には入れない
+function gradesUpTo(n,lower){n=+n||0;if(!(n>=1))return [];return lower?[...Array(n).keys()].map(i=>i+1):[n]}
+function checkList(source,data,set){const S=set||{},d=data||{};
+ if(source==='ktest')return kanjiQuestions(d.kt);
+ if(source==='sent'){const out=[];Object.values(d.s||{}).flat().forEach(row=>{const w=row&&row[0];if(w)out.push({t:'s',show:w,ans:row[1]||[]})});return out}
+ if(source==='kanji'){const out=[];gradesUpTo(Math.min(+S.grade||0,6),!!S.lower).forEach(g=>((d.k||{})[g]||[]).forEach(([k,r])=>{if(k)out.push({t:'k',show:k,ans:r||[]})}));return out}
+ if(source==='eng'){const eg=S.eLv==='same'||S.eLv==null||S.eLv===''?+S.grade:+S.eLv;const out=[];
+  gradesUpTo(eg,!!S.lower).forEach(g=>((d.e||{})[g]||[]).forEach(([w,r])=>{if(w)out.push({t:'e',show:w,ans:r||[]})}));return out}
+ return []}
+function checkNote(source,set){const S=set||{};
+ if(source==='ktest')return '学年は使いません';
+ if(source==='sent')return 'ぜんぶの文';
+ if(source==='eng'){const eg=S.eLv==='same'||S.eLv==null||S.eLv===''?+S.grade:+S.eLv;const name=eg>=8?'高校':eg>=7?'中学':eg+'ねん';return (S.lower&&eg>1?'1〜':'')+name}
+ const g=Math.min(+S.grade||0,6);return (S.lower&&g>1?'1〜':'')+g+'ねんせい'}
+function filterCheckItems(items,query){const q=normJa(query||'');const list=items||[];if(!q)return list.slice();
+ return list.filter(it=>!!it&&(normJa(it.show).includes(q)||(it.ans||[]).some(a=>normJa(a).includes(q))))}
+function judgeItem(item,alts,lv){if(!item)return false;const J=lv??1,a=alts||[],ans=item.ans||[];
+ if(item.t==='s')return matchSent(a,item.show,ans,J);if(item.t==='e')return matchEn(a,item.show,ans,J);return matchJa(a,item.show,ans,J)}
+function renderCheck(alts,ok,escFn){const esc=escFn||(s=>String(s)),heard=[];
+ for(const a of alts||[]){const s=String(a??'').trim();if(s&&!heard.includes(s))heard.push(s)}
+ return 'きこえた「'+esc(heard[0]||'')+'」'
+  +(heard.length>1?'<br><span class="missd">ほか: '+esc(heard.slice(1).join(' / '))+'</span>':'')
+  +(ok?'<br><b class="okc">○ せいかい</b>':'<br><b class="ngc">× ちがう</b>')}
 function safeHomophone(n,ans){const r=yomiOf(n);return !!r&&ans.includes(r)}
 function matchJa(alts,show,readings,lv=1){const ans=readings.map(normJa).filter(Boolean),sh=normJa(show);
  return alts.some(a=>{const n=normJa(a);if(!n)return false;
@@ -97,5 +120,5 @@ function renderMiss(alts,prompts,escFn){const esc=escFn||(s=>String(s)),d=missDe
   +(d.heard.length>1?'<br><span class="missd">ほか: '+esc(d.heard.slice(1).join(' / '))+'</span>':'')
   +'<br><b class="ngc">❌ どのモグラとも ちがうよ</b>'
   +'<br><span class="missd">照合: '+esc(d.targets.join(' / '))+'</span>'}
-G.Matcher={matchEn,matchJa,matchSent,sentScore,normJa,lev,yomiOf,setJaLexicon,setJaLexiconFromTable,lexiconRows,nextKt,kanjiQuestions,moleOpen,countsAsMiss,reviewMisses,missDetail,renderMiss};
+G.Matcher={matchEn,matchJa,matchSent,sentScore,normJa,lev,yomiOf,setJaLexicon,setJaLexiconFromTable,lexiconRows,nextKt,kanjiQuestions,moleOpen,countsAsMiss,reviewMisses,missDetail,renderMiss,checkList,checkNote,filterCheckItems,judgeItem,renderCheck};
 })(typeof window!='undefined'?window:globalThis);
