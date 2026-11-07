@@ -121,4 +121,27 @@ function end(){if(!running&&!moles.some(m=>m.q)){show('end');return}running=fals
  $('miss').innerHTML=u.length?'<b>れんしゅうしよう</b><br>'+u.map(q=>esc(q.show)+(q.t=='k'?'（'+esc(q.ans.join('・'))+'）':'')).join('<br>'):'ぜんぶ たたけたね！すごい！';show('end');tone(660,.2);setTimeout(()=>tone(990,.4),200)}
 $('ver').textContent=APP_VER+'・'+APP_DATE;
 $('go').onclick=start;$('again').onclick=start;$('quit').onclick=end;$('home2').onclick=()=>show('home');
+// はつおんチェック。マイクと一覧だけで、モグラ・得点・タイマー・復習は触らない
+let prec=null,pItem=null;
+function stopPrec(){try{prec&&prec.abort()}catch(e){}prec=null}
+function pronData(){return {k:DATA.k,e:DATA.e,s:DATA.s,kt:DATA.kt}}
+function renderPronList(){const src=$('pSrc').value,items=Matcher.filterCheckItems(Matcher.checkList(src,pronData(),S),$('pFind').value);
+ $('pNote').textContent=Matcher.checkNote(src,S)+(src==='ktest'&&!Matcher.checkList(src,pronData(),S).length?'。'+KTEST_HINT:'');
+ const box=$('pList');box.innerHTML='';if(!items.length){box.textContent='ないよ';return}
+ const frag=document.createDocumentFragment();items.forEach(it=>{const b=document.createElement('button');b.type='button';b.textContent=it.show;b.onclick=()=>openPron(it);frag.appendChild(b)});box.appendChild(frag)}
+function openPron(it){pItem=it;$('pPick').style.display='none';$('pSay').style.display='block';$('pWord').textContent=it.show;$('pWord').classList.toggle('sent',it.t==='s');$('pRead').textContent=it.t==='k'&&it.ans&&it.ans.length?it.ans.join('・'):'';$('pHeard').textContent='…';listenPron()}
+function listenPron(){stopPrec();if(!pItem)return;if(!SR){$('pMic').textContent='このブラウザは おんせいにんしきに たいおうしていません（iPhoneはSafari、AndroidはChromeでひらいてね）';return}
+ const item=pItem,lang=item.t==='k'?'ja-JP':'en-US';prec=new SR();prec.lang=lang;prec.interimResults=true;prec.continuous=!/iPhone|iPad/.test(navigator.userAgent);prec.maxAlternatives=10;
+ prec.onstart=()=>$('pMic').textContent='🎤 きいてるよ（'+(lang=='ja-JP'?'にほんご':'えいご')+'）';
+ prec.onresult=e=>{for(let i=e.resultIndex;i<e.results.length;i++){const r=e.results[i],alts=[];for(let j=0;j<r.length;j++)alts.push(r[j].transcript);
+  const ok=Matcher.judgeItem(item,alts,S.judge??1);
+  $('pHeard').innerHTML=r.isFinal||ok?Matcher.renderCheck(alts,ok,esc):'きこえた「'+esc(alts[0]||'')+'」…';
+  if(r.isFinal){$('pMic').textContent='もういちど で ききなおせるよ';try{prec.abort()}catch(e){}}}};
+ prec.onerror=ev=>{if(ev.error=='not-allowed'||ev.error=='service-not-allowed')$('pMic').textContent='⚠️ マイクがきょかされていません'};
+ prec.onend=()=>{};try{prec.start()}catch(e){$('pMic').textContent='マイクを ひらけませんでした'}}
+function showPron(){stopPrec();pItem=null;$('pSay').style.display='none';$('pPick').style.display='block';$('pFind').value='';renderPronList();show('pron')}
+$('toCheck').onclick=showPron;$('pSrc').onchange=renderPronList;$('pFind').oninput=renderPronList;
+$('pRetry').onclick=()=>{if(!pItem)return;$('pHeard').textContent='…';listenPron()};
+$('pBackList').onclick=()=>{stopPrec();pItem=null;$('pSay').style.display='none';$('pPick').style.display='block'};
+$('pHome').onclick=()=>{stopPrec();pItem=null;show('home')};
 if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js');
