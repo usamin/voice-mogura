@@ -14,8 +14,8 @@ assert(M&&M.matchJa&&M.setJaLexiconFromTable,'Matcher');
 check('音読み表で乾燥はかんそう',M.yomiOf('乾燥')==='かんそう');
 check('1字は音読み表だけでは読まない',M.yomiOf('曲')===''&&M.yomiOf('乾')==='');
 
-// 語彙を入れる前は、別漢字を読みに変えない
-levels('語彙なし 局←曲',lv=>M.matchJa(['曲'],'局',['きょく'],lv),false);
+// シートが無くても、常用漢字の音が読める字は同音にする
+levels('語彙なしでも常用の曲は局',lv=>M.matchJa(['曲'],'局',['きょく'],lv),true);
 levels('語彙なし 局←きょく',lv=>M.matchJa(['きょく'],'局',['きょく'],lv),true);
 
 const wordSrc=fs.readFileSync(root+'/words.js','utf8')+'\nglobalThis.KANJI=KANJI;globalThis.ENG=ENG;globalThis.SENT=SENT;';
@@ -57,10 +57,51 @@ levels('山←やま',lv=>M.matchJa(['やま'],'山',['やま','さん'],lv),tru
 levels('山←さん',lv=>M.matchJa(['さん'],'山',['やま','さん'],lv),true);
 levels('山←山',lv=>M.matchJa(['山'],'山',['やま','さん'],lv),true);
 check('句点つきの曲',M.matchJa(['曲。'],'局',['きょく'],2)===true);
+check('熟語用の音読みは送りがなを変えない',M.yomiOf('話す')==='わす');
 
-// 学年をまたいでも表ぜんぶを見る。今の学年だけだと鼻は入らない
+// はつおんチェックで外れていた例。読みへ直して、正解の読みと完全一致ならどの厳しさでも当たり
+const has=rs=>rs.every(r=>M.jaReadings('9').includes(r));
+check('9の読み',has(['きゅう','く','ここの','ここのつ'])&&!M.jaReadings('9').includes('たま'));
+check('1の読み',['いち','ひとつ'].every(r=>M.jaReadings('1').includes(r)));
+check('話すははなすで、わすではない',M.jaReadings('話す').join(',')==='はなす');
+check('薬の読みにやくとくすり',['やく','くすり'].every(r=>M.jaReadings('薬').includes(r)));
+check('複数読みの球は字のままでは読まない',M.jaReadings('球').length===0);
+levels('球←9',lv=>M.matchJa(['9'],'球',['たま','きゅう'],lv),true);
+levels('球←９',lv=>M.matchJa(['９'],'球',['たま','きゅう'],lv),true);
+levels('球←９。',lv=>M.matchJa(['９。'],'球',['たま','きゅう'],lv),true);
+levels('9はたまだけでは外れ',lv=>M.matchJa(['9'],'玉',['たま'],lv),false);
+levels('19は球に当たらない',lv=>M.matchJa(['19'],'球',['たま','きゅう'],lv),false);
+levels('08は球に当たらない',lv=>M.matchJa(['08'],'球',['たま','きゅう'],lv),false);
+levels('役←薬',lv=>M.matchJa(['薬'],'役',['やく'],lv),true);
+levels('役←くすりは外れ',lv=>M.matchJa(['くすり'],'役',['やく'],lv),false);
+levels('薬は猫に当たらない',lv=>M.matchJa(['薬'],'猫',['ねこ'],lv),false);
+levels('放す←話す',lv=>M.matchJa(['話す'],'放す',['はなす'],lv),true);
+levels('放す←はなす',lv=>M.matchJa(['はなす'],'放す',['はなす'],lv),true);
+levels('放す←話しますは外れ',lv=>M.matchJa(['話します'],'放す',['はなす'],lv),false);
+levels('放す←話したは外れ',lv=>M.matchJa(['話した'],'放す',['はなす'],lv),false);
+levels('放す←ほうは外れ',lv=>M.matchJa(['ほう'],'放す',['はなす'],lv),false);
+levels('話は花に当たらない',lv=>M.matchJa(['話'],'花',['はな'],lv),false);
+levels('1はいち',lv=>M.matchJa(['1'],'一',['いち'],lv),true);
+levels('1はひとつ',lv=>M.matchJa(['1'],'一つ',['ひとつ'],lv),true);
+levels('１はいち',lv=>M.matchJa(['１'],'一',['いち'],lv),true);
+levels('10はじゅう',lv=>M.matchJa(['10'],'十',['じゅう'],lv),true);
+levels('10はとお',lv=>M.matchJa(['１０'],'十',['とお'],lv),true);
+levels('11はいちに当たらない',lv=>M.matchJa(['11'],'一',['いち'],lv),false);
+levels('20はにじゅう',lv=>M.matchJa(['20'],'二十',['にじゅう'],lv),true);
+levels('100はひゃく',lv=>M.matchJa(['100'],'百',['ひゃく'],lv),true);
+levels('300はさんびゃく',lv=>M.matchJa(['300'],'三百',['さんびゃく'],lv),true);
+levels('600はろっぴゃく',lv=>M.matchJa(['600'],'六百',['ろっぴゃく'],lv),true);
+levels('800ははっぴゃく',lv=>M.matchJa(['800'],'八百',['はっぴゃく'],lv),true);
+levels('3000はさんぜん',lv=>M.matchJa(['3000'],'三千',['さんぜん'],lv),true);
+levels('8000ははっせん',lv=>M.matchJa(['8000'],'八千',['はっせん'],lv),true);
+levels('700はしちひゃく',lv=>M.matchJa(['700'],'七百',['しちひゃく'],lv),true);
+levels('4はし',lv=>M.matchJa(['4'],'四',['し'],lv),true);
+levels('0はれい',lv=>M.matchJa(['0'],'零',['れい'],lv),true);
+levels('きびしいでも球←9',lv=>M.matchJa(['9'],'球',['たま','きゅう'],lv),true);
+
+// 学年をまたいでも表ぜんぶを見る。常用漢字の音・訓は、その字が表に無くても使う
 M.setJaLexiconFromTable({1:[['花','はな'],['川','かわ']]});
-levels('1年だけだと花←鼻は外れ',lv=>M.matchJa(['鼻'],'花',['はな'],lv),false);
+levels('表に無い鼻も常用の訓では花',lv=>M.matchJa(['鼻'],'花',['はな'],lv),true);
 M.setJaLexiconFromTable({1:[['花','はな'],['川','かわ']],3:[['鼻','はな']],5:[['河','かわ']]});
 levels('全学年なら花←鼻',lv=>M.matchJa(['鼻'],'花',['はな'],lv),true);
 levels('全学年なら川←河',lv=>M.matchJa(['河'],'川',['かわ'],lv),true);
@@ -74,10 +115,13 @@ levels('合体して複数読みの生・せい',lv=>M.matchJa(['生'],'性',['�
 M.setJaLexiconFromTable({3:[['局','きょく'],['曲','きょく']]});
 check('シート前 局←曲',M.matchJa(['曲'],'局',['きょく'],1)===true);
 M.setJaLexiconFromTable({3:[['局','きょく']]});
-check('曲を無効化したシート',M.matchJa(['曲'],'局',['きょく'],1)===false);
+check('表から曲を外しても常用の音は残る',M.matchJa(['曲'],'局',['きょく'],1)===true);
 const prev={3:[['局',['きょく']],['曲',['きょく']]]};
+M.setJaLexiconFromTable({3:[['黒猫','ねこ']]});
+check('表の造語は同音',M.matchJa(['黒猫'],'犬',['ねこ'],2)===true);
 M.setJaLexiconFromTable({});
-check('空の表は同音を消す',M.matchJa(['曲'],'局',['きょく'],1)===false);
+check('空の表は造語の同音を消す',M.matchJa(['黒猫'],'犬',['ねこ'],2)===false);
+check('空の表でも常用の曲は残る',M.matchJa(['曲'],'局',['きょく'],1)===true);
 M.setJaLexiconFromTable(prev);
 check('前の表へ戻すと局←曲',M.matchJa(['曲'],'局',['きょく'],2)===true);
 
@@ -94,7 +138,7 @@ check('見出し行は入らない',!Object.values(sheetTable).flat().some(([w])
 M.setJaLexiconFromTable(sheetTable);
 levels('シートCSV 局←曲',lv=>M.matchJa(['曲'],'局',['きょく'],lv),true);
 levels('シートCSV 究←球',lv=>M.matchJa(['球'],'究',['きゅう'],lv),false);
-levels('シートCSV 花←鼻（無効）',lv=>M.matchJa(['鼻'],'花',['はな'],lv),false);
+levels('無効行の鼻も常用の訓では花',lv=>M.matchJa(['鼻'],'花',['はな'],lv),true);
 levels('シートCSV 川←河（別学年）',lv=>M.matchJa(['河'],'川',['かわ'],lv),true);
 const tab=(text,fb)=>{const o=parsedBox.parseTab(text);return Object.keys(o).length?o:fb};
 const fallback=tab('not,a,sheet\n',builtin);
@@ -139,8 +183,8 @@ check('照合は最終の不正解だけ',appSrc.includes("H.innerHTML=Matcher.r
 
 const self={};
 vm.runInNewContext(fs.readFileSync(root+'/version.js','utf8'),{self});
-check('版はv7.0.0',self.APP_VER==='v7.0.0');
-check('更新日',self.APP_DATE==='2026/11/07');
+check('版はv7.0.1',self.APP_VER==='v7.0.1');
+check('更新日',self.APP_DATE==='2026/11/08');
 const sw=fs.readFileSync(root+'/sw.js','utf8');
 check('キャッシュ名はversion.js由来',sw.includes("importScripts('version.js')")&&sw.includes("const C='mogura-'+self.APP_VER"));
 check('古いキャッシュを消す',sw.includes('ks.filter(k=>k!=C)'));
@@ -149,9 +193,9 @@ const precache=sw.slice(sw.indexOf('F=['),sw.indexOf('];')+1);
 for(const f of ['version.js','index.html','app.js','match.js','yomi.js','words.js'])check('事前キャッシュ '+f,precache.includes(f));
 check('テストは事前キャッシュしない',!precache.includes('test.js'));
 const C='mogura-'+self.APP_VER;
-check('小数の版もキャッシュ名にそのまま入る',C==='mogura-v7.0.0'&&C!=='mogura-v7'&&C!=='mogura-v6.1.2'&&C!=='mogura-v6.1.1');
-const kept=['mogura-v5','mogura-v6','mogura-v6.1','mogura-v6.1.1','mogura-v6.1.2','mogura-v7',C,'other-cache'].filter(k=>k===C);
-check('v7.0.0以外のキャッシュ名は破棄される',kept.length===1&&kept[0]==='mogura-v7.0.0');
+check('小数の版もキャッシュ名にそのまま入る',C==='mogura-v7.0.1'&&C!=='mogura-v7'&&C!=='mogura-v7.0.0'&&C!=='mogura-v6.1.2'&&C!=='mogura-v6.1.1');
+const kept=['mogura-v5','mogura-v6','mogura-v6.1','mogura-v6.1.1','mogura-v6.1.2','mogura-v7','mogura-v7.0.0',C,'other-cache'].filter(k=>k===C);
+check('v7.0.1以外のキャッシュ名は破棄される',kept.length===1&&kept[0]==='mogura-v7.0.1');
 check('画面の折り返し',html.includes('#heard .missd')&&html.includes('overflow-wrap:anywhere'));
 check('設定に漢字テスト用がある',html.includes('value="ktest">漢字テスト用</option>')&&html.includes('id="ktestNote"'));
 
@@ -199,7 +243,8 @@ check('0件の案内を出して通常漢字では始めない',appSrc.includes(
 function KTEST_HINT_SRC(){return '「漢字テスト用」のシートに、A列へ漢字、B列へ読みを入れてね（1行目は見出しです）'}
 
 M.setJaLexicon(M.lexiconRows('kanji',builtin,[['箸',['はし']],[ '曲',['きょく','くせ'] ]]));
-levels('通常モードはテスト用の箸を使わない',lv=>M.matchJa(['箸'],'橋',['はし'],lv),false);
+levels('常用の箸はテスト用の行が無くても橋',lv=>M.matchJa(['箸'],'橋',['はし'],lv),true);
+levels('通常モードはテスト用の造語を使わない',lv=>M.matchJa(['猫猫'],'犬',['いぬ'],lv),false);
 levels('通常モードはテスト用の読み追加で曲を壊さない',lv=>M.matchJa(['曲'],'局',['きょく'],lv),true);
 M.setJaLexicon(M.lexiconRows('ktest',builtin,[['箸',['はし']]]));
 levels('テストモードでは箸←はしの橋',lv=>M.matchJa(['箸'],'橋',['はし'],lv),true);
@@ -233,7 +278,8 @@ check('シートの負けるは訓のまま',M.yomiOf('負ける')==='まける'
 check('シートの農作業はシートの読み',M.yomiOf('農作業')==='のうさぎょう');
 check('漢字だけの学校はシートの読み',M.yomiOf('学校')==='がっこう');
 check('熟語の中の炭はすみにしない',M.yomiOf('炭素')==='たんそ');
-check('1字の乾は館に当たらない',M.matchJa(['乾'],'館',['かん'],1)===false);
+check('乾の音かんは館に当たる',M.matchJa(['乾'],'館',['かん'],1)===true);
+check('乾の訓は館に当たらない',M.matchJa(['かわく'],'館',['かん'],1)===false);
 // 漢字タブ（学年を問わず）でも同じ連結。テスト用の語は通常モードの辞書に入れない
 M.setJaLexicon(M.lexiconRows('kanji',builtin,[['感想',['かんそう']]]));
 levels('通常の漢字タブ 先生←専制',lv=>M.matchJa(['専制'],'先生',['せんせい'],lv),true);
@@ -348,6 +394,10 @@ const kanItem={t:'k',show:'感想',ans:['かんそう']};
 levels('チェック 感想←乾燥',lv=>M.judgeItem(kanItem,['乾燥','乾燥乾燥','炭素乾燥','酸素乾燥'],lv),true);
 levels('チェック 乾燥は猫に当たらない',lv=>M.judgeItem({t:'k',show:'猫',ans:['ねこ']},['乾燥'],lv),false);
 levels('チェックの厳しさはゲームと同じ',lv=>M.judgeItem({t:'k',show:'局',ans:['きょく']},['きょくです'],lv),[true,true,false]);
+levels('チェック 球←9',lv=>M.judgeItem({t:'k',show:'球',ans:['たま','きゅう']},['9'],lv),true);
+levels('チェック 役←薬',lv=>M.judgeItem({t:'k',show:'役',ans:['やく']},['薬'],lv),true);
+levels('チェック 放す←話す',lv=>M.judgeItem({t:'k',show:'放す',ans:['はなす']},['話す'],lv),true);
+levels('チェック きびしいでも放す←話す',lv=>M.judgeItem({t:'k',show:'放す',ans:['はなす']},['話す'],lv),true);
 levels('チェック ten←10',lv=>M.judgeItem({t:'e',show:'ten',ans:[]},['10'],lv),true);
 levels('チェック 文 I am ten.←I am 10.',lv=>M.judgeItem({t:'s',show:'I am ten.',ans:[]},['I am 10.'],lv),true);
 levels('チェック 関係ない英語',lv=>M.judgeItem({t:'e',show:'cat',ans:[]},['dog'],lv),false);
