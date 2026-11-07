@@ -44,13 +44,27 @@ function sentScore(heard,target,lv=1){const tw=sTok(target),used=new Set();if(!t
 function matchSent(alts,sent,extra=[],lv=1){const need=RATE[lv]??.8;
  return alts.some(a=>[sent,...extra].some(t=>sentScore(a,t,lv)>=need-1e-9))}
 // 読みがちょうど一つの表記だけを、その読みへ対応づける。複数読みの字は入れない
-let jaOne=new Map();
+let jaOne=new Map(),jaAmb=new Set();
+// 常用漢字の音読み先頭一つ。シートに無い漢字を、2字以上の熟語で連結する。1字には使わない
+const onYomi=new Map();
+for(const part of String(G.YO_ON||'').split('|')){if(!part)continue;const y=normJa(part.slice(1));if(part[0]&&y)onYomi.set(part[0],y)}
 const readParts=raw=>Array.isArray(raw)?raw:String(raw??'').split(/[、,，\/／]/);
 function setJaLexicon(rows){const acc=new Map();
  for(const row of rows||[]){if(!row)continue;const surface=normJa(row[0]);if(!surface)continue;
   let set=acc.get(surface);if(!set){set=new Set();acc.set(surface,set)}
   for(const item of readParts(row[1]))for(const part of String(item??'').split(/[、,，\/／]/)){const n=normJa(part);if(n)set.add(n)}}
- jaOne=new Map();for(const [surface,set] of acc)if(set.size===1)jaOne.set(surface,[...set][0])}
+ jaOne=new Map();jaAmb=new Set();
+ for(const [surface,set] of acc){if(set.size===1)jaOne.set(surface,[...set][0]);else jaAmb.add(surface)}}
+const isKana=c=>/[\u3041-\u3096]/.test(c);
+// 表記そのものの読みが一つならそれを使う。漢字だけの熟語は、2字以上のシート語を優先し、残りの字は音読みの先頭をつなぐ。
+// 1字のシート読み（炭=すみ など）は熟語の中では使わない。複数読みの字が残ったら、その熟語は同音にしない。
+function yomiOf(n){if(!n)return '';if(jaOne.has(n))return jaOne.get(n);if(n.length<2||jaAmb.has(n))return '';
+ const kanjiOnly=[...n].every(ch=>!isKana(ch));let i=0,out='';
+ while(i<n.length){let best=0;for(let j=n.length;j>i+(kanjiOnly?1:0);j--)if(jaOne.has(n.slice(i,j))){best=j;break}
+  if(best){out+=jaOne.get(n.slice(i,best));i=best;continue}
+  const ch=n[i];if(isKana(ch)){out+=ch;i++;continue}
+  if(jaAmb.has(ch)||!onYomi.get(ch))return '';out+=onYomi.get(ch);i++}
+ return out}
 function setJaLexiconFromTable(table){setJaLexicon(lexiconRows('kanji',table,[]))}
 // 通常モードは漢字表だけ。漢字テスト用のときだけ、そのタブの表記も同音の辞書に足す
 function lexiconRows(mode,kTable,ktRows){const rows=[];
@@ -65,7 +79,7 @@ function countsAsMiss(m){return !!(m&&m.q&&!m.hit)}
 function reviewMisses(missed){const out=[];const seen=new Set();
  for(const q of missed||[]){if(!q||q.show==null||q.show==='')continue;const k=String(q.show);if(seen.has(k))continue;seen.add(k);out.push(q)}
  return out}
-function safeHomophone(n,ans){const r=jaOne.get(n);return !!r&&ans.includes(r)}
+function safeHomophone(n,ans){const r=yomiOf(n);return !!r&&ans.includes(r)}
 function matchJa(alts,show,readings,lv=1){const ans=readings.map(normJa).filter(Boolean),sh=normJa(show);
  return alts.some(a=>{const n=normJa(a);if(!n)return false;
   if(safeHomophone(n,ans))return true;
@@ -83,5 +97,5 @@ function renderMiss(alts,prompts,escFn){const esc=escFn||(s=>String(s)),d=missDe
   +(d.heard.length>1?'<br><span class="missd">ほか: '+esc(d.heard.slice(1).join(' / '))+'</span>':'')
   +'<br><b class="ngc">❌ どのモグラとも ちがうよ</b>'
   +'<br><span class="missd">照合: '+esc(d.targets.join(' / '))+'</span>'}
-G.Matcher={matchEn,matchJa,matchSent,sentScore,normJa,lev,setJaLexicon,setJaLexiconFromTable,lexiconRows,nextKt,kanjiQuestions,moleOpen,countsAsMiss,reviewMisses,missDetail,renderMiss};
+G.Matcher={matchEn,matchJa,matchSent,sentScore,normJa,lev,yomiOf,setJaLexicon,setJaLexiconFromTable,lexiconRows,nextKt,kanjiQuestions,moleOpen,countsAsMiss,reviewMisses,missDetail,renderMiss};
 })(typeof window!='undefined'?window:globalThis);

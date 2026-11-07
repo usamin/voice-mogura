@@ -7,9 +7,12 @@ function check(name,cond){if(!cond){fail++;console.error('FAIL',name)}else ok++}
 function levels(name,fn,want){for(const lv of [0,1,2]){const hit=!!fn(lv);const exp=Array.isArray(want)?!!want[lv]:!!want;check(name+' / '+(['やさしい','ふつう','きびしい'][lv]),hit===exp)}}
 
 const matchSrc=fs.readFileSync(root+'/match.js','utf8');
+vm.runInNewContext(fs.readFileSync(root+'/yomi.js','utf8'),{window:undefined,globalThis:globalThis});
 vm.runInNewContext(matchSrc,{window:undefined,globalThis:globalThis});
 const M=globalThis.Matcher;
 assert(M&&M.matchJa&&M.setJaLexiconFromTable,'Matcher');
+check('音読み表で乾燥はかんそう',M.yomiOf('乾燥')==='かんそう');
+check('1字は音読み表だけでは読まない',M.yomiOf('曲')===''&&M.yomiOf('乾')==='');
 
 // 語彙を入れる前は、別漢字を読みに変えない
 levels('語彙なし 局←曲',lv=>M.matchJa(['曲'],'局',['きょく'],lv),false);
@@ -104,6 +107,7 @@ check('offlineのときは語彙を差し替えない',loadBody.indexOf("throw '
 check('初期化とシート成功の両方で語彙を作る',appSrc.includes('function bindLex(){Matcher.setJaLexicon(Matcher.lexiconRows(S.mode,DATA.k,DATA.kt))}')&&appSrc.includes('DATA=d;bindLex();')&&appSrc.includes('bindLex();refreshHint();'));
 const html=fs.readFileSync(root+'/index.html','utf8');
 check('match.jsはapp.jsより先',html.indexOf('src="match.js"')>0&&html.indexOf('src="match.js"')<html.indexOf('src="app.js"'));
+check('音読み表は判定より先',html.indexOf('src="yomi.js"')>0&&html.indexOf('src="yomi.js"')<html.indexOf('src="match.js"'));
 
 // 英語。ten←10 は元から通る。ここは回帰であり、新規の修正ではない
 M.setJaLexiconFromTable(builtin);
@@ -135,19 +139,19 @@ check('照合は最終の不正解だけ',appSrc.includes("H.innerHTML=Matcher.r
 
 const self={};
 vm.runInNewContext(fs.readFileSync(root+'/version.js','utf8'),{self});
-check('版はv6.1.1',self.APP_VER==='v6.1.1');
+check('版はv6.1.2',self.APP_VER==='v6.1.2');
 check('更新日',self.APP_DATE==='2026/11/07');
 const sw=fs.readFileSync(root+'/sw.js','utf8');
 check('キャッシュ名はversion.js由来',sw.includes("importScripts('version.js')")&&sw.includes("const C='mogura-'+self.APP_VER"));
 check('古いキャッシュを消す',sw.includes('ks.filter(k=>k!=C)'));
 check('v5を直書きしていない',!sw.includes('mogura-v5'));
 const precache=sw.slice(sw.indexOf('F=['),sw.indexOf('];')+1);
-for(const f of ['version.js','index.html','app.js','match.js','words.js'])check('事前キャッシュ '+f,precache.includes(f));
+for(const f of ['version.js','index.html','app.js','match.js','yomi.js','words.js'])check('事前キャッシュ '+f,precache.includes(f));
 check('テストは事前キャッシュしない',!precache.includes('test.js'));
 const C='mogura-'+self.APP_VER;
-check('小数の版もキャッシュ名にそのまま入る',C==='mogura-v6.1.1'&&C!=='mogura-v6'&&C!=='mogura-v6.1'&&C!=='mogura-v7');
-const kept=['mogura-v5','mogura-v6','mogura-v6.1','mogura-v7',C,'other-cache'].filter(k=>k===C);
-check('v6.1.1以外のキャッシュ名は破棄される',kept.length===1&&kept[0]==='mogura-v6.1.1');
+check('小数の版もキャッシュ名にそのまま入る',C==='mogura-v6.1.2'&&C!=='mogura-v6'&&C!=='mogura-v6.1'&&C!=='mogura-v6.1.1'&&C!=='mogura-v7');
+const kept=['mogura-v5','mogura-v6','mogura-v6.1','mogura-v6.1.1','mogura-v7',C,'other-cache'].filter(k=>k===C);
+check('v6.1.2以外のキャッシュ名は破棄される',kept.length===1&&kept[0]==='mogura-v6.1.2');
 check('画面の折り返し',html.includes('#heard .missd')&&html.includes('overflow-wrap:anywhere'));
 check('設定に漢字テスト用がある',html.includes('value="ktest">漢字テスト用</option>')&&html.includes('id="ktestNote"'));
 
@@ -211,6 +215,37 @@ levels('テスト表だけの局←きょく',lv=>M.matchJa(['きょく'],'局',
 levels('テスト表だけの球はきゅうの別表記にならない',lv=>M.matchJa(['球'],'究',['きゅう'],lv),false);
 levels('テスト表の父は等に当たらない',lv=>M.matchJa(['父'],'等',['とう'],lv),false);
 levels('テスト表の等は父のとうに当たる',lv=>M.matchJa(['等'],'父',['ちち','とう'],lv),true);
+
+// 熟語の同音。認識が別の漢字でも、連結した読みが出題の読みと一致すれば当たり
+M.setJaLexicon(M.lexiconRows('ktest',builtin,[['感想',['かんそう']],['農作業',['のうさぎょう']],['負ける',['まける']]]));
+levels('感想←乾燥',lv=>M.matchJa(['乾燥'],'感想',['かんそう'],lv),true);
+levels('感想←乾燥と他候補',lv=>M.matchJa(['乾燥','乾燥乾燥','炭素乾燥','酸素乾燥'],'感想',['かんそう'],lv),true);
+levels('感想←乾燥乾燥だけでは外れ',lv=>M.matchJa(['乾燥乾燥'],'感想',['かんそう'],lv),false);
+levels('感想←炭素乾燥',lv=>M.matchJa(['炭素乾燥'],'感想',['かんそう'],lv),false);
+levels('感想←酸素乾燥',lv=>M.matchJa(['酸素乾燥'],'感想',['かんそう'],lv),false);
+levels('乾燥は関係ない語に当たらない',lv=>M.matchJa(['乾燥'],'猫',['ねこ'],lv),false);
+levels('乾燥は花に当たらない',lv=>M.matchJa(['乾燥'],'花',['はな'],lv),false);
+levels('農作業←読み',lv=>M.matchJa(['のうさぎょう'],'農作業',['のうさぎょう'],lv),true);
+levels('農作業←乾燥',lv=>M.matchJa(['乾燥'],'農作業',['のうさぎょう'],lv),false);
+levels('負ける←読み',lv=>M.matchJa(['まける'],'負ける',['まける'],lv),true);
+levels('負ける←乾燥',lv=>M.matchJa(['乾燥'],'負ける',['まける'],lv),false);
+check('シートの負けるは訓のまま',M.yomiOf('負ける')==='まける');
+check('シートの農作業はシートの読み',M.yomiOf('農作業')==='のうさぎょう');
+check('漢字だけの学校はシートの読み',M.yomiOf('学校')==='がっこう');
+check('熟語の中の炭はすみにしない',M.yomiOf('炭素')==='たんそ');
+check('1字の乾は館に当たらない',M.matchJa(['乾'],'館',['かん'],1)===false);
+// 漢字タブ（学年を問わず）でも同じ連結。テスト用の語は通常モードの辞書に入れない
+M.setJaLexicon(M.lexiconRows('kanji',builtin,[['感想',['かんそう']]]));
+levels('通常の漢字タブ 先生←専制',lv=>M.matchJa(['専制'],'先生',['せんせい'],lv),true);
+levels('専制は花に当たらない',lv=>M.matchJa(['専制'],'花',['はな'],lv),false);
+check('漢字だけの生物はせいぶつ',M.yomiOf('生物')==='せいぶつ');
+M.setJaLexicon(M.lexiconRows('kanji',{8:[['感想',['かんそう']]]},[]));
+levels('高校タブの感想←乾燥',lv=>M.matchJa(['乾燥'],'感想',['かんそう'],lv),true);
+M.setJaLexicon(M.lexiconRows('ktest',{},[['感想',['かんそう']]]));
+levels('テストタブだけの感想←乾燥',lv=>M.matchJa(['乾燥'],'感想',['かんそう'],lv),true);
+M.setJaLexiconFromTable({1:[['生','なま']],3:[['生','せい'],['物','もの']]});
+check('複数読みの生を含む熟語は読まない',M.yomiOf('生物')==='');
+levels('複数読みの生は熟語でも性に当たらない',lv=>M.matchJa(['生物'],'性',['せい'],lv),false);
 
 // 復習欄: その回で出題され、正解できなかったものだけ
 check('正解直後は穴を塞いだまま',M.moleOpen({q:{show:'発見'},hit:true})===false);
