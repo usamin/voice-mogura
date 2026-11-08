@@ -88,6 +88,22 @@ function addOkuri(ch,suffix,out){let hit=false;
  for(const k of kanjiKun.get(ch)||[]){if(!k||k.startsWith('-'))continue;const dot=k.indexOf('.');if(dot<0)continue;
   const stem=normJa(k.slice(0,dot)),ok=normJa(k.slice(dot+1));if(!stem||!ok||ok!==suffix)continue;out.add(stem+ok);hit=true}
  if(!hit)for(const r of kanjiOn.get(ch)||[])if(r)out.add(r+suffix)}
+// 熟語の中の1字。音を全部と、点の前の訓（悪+者 → わる+もの）。送りの仮名自体は足さない
+function pieceReadings(ch){if(isKana(ch))return [ch];const out=[],seen=new Set();
+ const add=r=>{if(r&&!seen.has(r)){seen.add(r);out.push(r)}};
+ for(const r of kanjiOn.get(ch)||[])add(r);
+ for(const k of kanjiKun.get(ch)||[]){if(!k||k.startsWith('-'))continue;const dot=k.indexOf('.');
+  const raw=(dot>=0?k.slice(0,dot):k).replace(/-+$/,'');if(!raw||raw.includes('-'))continue;add(normJa(raw))}
+ return out}
+// 各字の音・訓を連結して、正解の読みと完全一致するか。表記が混ぜ書きでも、聞いた熟語の読みで当たる
+function compoundMatches(n,ans){if(!n||[...n].length<2||jaAmb.has(n))return false;const chars=[...n];
+ if(chars.length>8||!chars.some(ch=>!isKana(ch)))return false;
+ const pieces=chars.map(pieceReadings);if(pieces.some(p=>!p.length))return false;
+ const targets=(ans||[]).filter(Boolean);if(!targets.length)return false;const maxLen=Math.max(...targets.map(t=>t.length));
+ function walk(i,acc){if(acc.length>maxLen)return false;if(i===chars.length)return targets.includes(acc);
+  if(!targets.some(t=>t.startsWith(acc)))return false;
+  for(const p of pieces[i])if(walk(i+1,acc+p))return true;return false}
+ return walk(0,'')}
 // きこえた表記の読み。数字、1字の音と点のない訓、送りが点が一致する訓、漢字だけの熟語。
 // シートで複数読みの表記は空（球のたま/きゅうは、字を言っただけでは決めない）。
 function jaReadings(n){if(!n)return [];if(/^[0-9]+$/.test(n))return numberReadings(n);if(jaAmb.has(n))return [];
@@ -135,7 +151,9 @@ function renderCheck(alts,ok,escFn){const esc=escFn||(s=>String(s)),heard=[];
   +(heard.length>1?'<br><span class="missd">ほか: '+esc(heard.slice(1).join(' / '))+'</span>':'')
   +(ok?'<br><b class="okc">○ せいかい</b>':'<br><b class="ngc">× ちがう</b>')}
 // 読みが正解のどれかと完全に同じなら、やさしさに関係なく当たり。きびしいが拒むのは文の途中と1文字ちがいだけ。
-function safeHomophone(n,ans){return jaReadings(n).some(r=>ans.includes(r))}
+// 読みの完全一致（音・訓の組み合わせを含む）は、やさしさに関係なく当たり。
+// きびしいが拒むのは文の途中と1文字ちがいだけ。混ぜ書き（悪もの）も、聞いた熟語の読みがシートの読みと一致すれば当たり。
+function safeHomophone(n,ans){return jaReadings(n).some(r=>ans.includes(r))||compoundMatches(n,ans)}
 function matchJa(alts,show,readings,lv=1){const ans=readings.map(normJa).filter(Boolean),sh=normJa(show);
  return alts.some(a=>{const n=normJa(a);if(!n)return false;
   if(safeHomophone(n,ans))return true;

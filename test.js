@@ -183,8 +183,8 @@ check('照合は最終の不正解だけ',appSrc.includes("H.innerHTML=Matcher.r
 
 const self={};
 vm.runInNewContext(fs.readFileSync(root+'/version.js','utf8'),{self});
-check('版はv7.0.1',self.APP_VER==='v7.0.1');
-check('更新日',self.APP_DATE==='2026/11/08');
+check('版はv7.0.2',self.APP_VER==='v7.0.2');
+check('更新日',self.APP_DATE==='2026/11/09');
 const sw=fs.readFileSync(root+'/sw.js','utf8');
 check('キャッシュ名はversion.js由来',sw.includes("importScripts('version.js')")&&sw.includes("const C='mogura-'+self.APP_VER"));
 check('古いキャッシュを消す',sw.includes('ks.filter(k=>k!=C)'));
@@ -193,9 +193,9 @@ const precache=sw.slice(sw.indexOf('F=['),sw.indexOf('];')+1);
 for(const f of ['version.js','index.html','app.js','match.js','yomi.js','words.js'])check('事前キャッシュ '+f,precache.includes(f));
 check('テストは事前キャッシュしない',!precache.includes('test.js'));
 const C='mogura-'+self.APP_VER;
-check('小数の版もキャッシュ名にそのまま入る',C==='mogura-v7.0.1'&&C!=='mogura-v7'&&C!=='mogura-v7.0.0'&&C!=='mogura-v6.1.2'&&C!=='mogura-v6.1.1');
-const kept=['mogura-v5','mogura-v6','mogura-v6.1','mogura-v6.1.1','mogura-v6.1.2','mogura-v7','mogura-v7.0.0',C,'other-cache'].filter(k=>k===C);
-check('v7.0.1以外のキャッシュ名は破棄される',kept.length===1&&kept[0]==='mogura-v7.0.1');
+check('小数の版もキャッシュ名にそのまま入る',C==='mogura-v7.0.2'&&C!=='mogura-v7'&&C!=='mogura-v7.0.1'&&C!=='mogura-v7.0.0'&&C!=='mogura-v6.1.2');
+const kept=['mogura-v5','mogura-v6','mogura-v6.1','mogura-v6.1.1','mogura-v6.1.2','mogura-v7','mogura-v7.0.0','mogura-v7.0.1',C,'other-cache'].filter(k=>k===C);
+check('v7.0.2以外のキャッシュ名は破棄される',kept.length===1&&kept[0]==='mogura-v7.0.2');
 check('画面の折り返し',html.includes('#heard .missd')&&html.includes('overflow-wrap:anywhere'));
 check('設定に漢字テスト用がある',html.includes('value="ktest">漢字テスト用</option>')&&html.includes('id="ktestNote"'));
 
@@ -278,6 +278,15 @@ check('シートの負けるは訓のまま',M.yomiOf('負ける')==='まける'
 check('シートの農作業はシートの読み',M.yomiOf('農作業')==='のうさぎょう');
 check('漢字だけの学校はシートの読み',M.yomiOf('学校')==='がっこう');
 check('熟語の中の炭はすみにしない',M.yomiOf('炭素')==='たんそ');
+M.setJaLexicon(M.lexiconRows('kanji',builtin,[]));
+levels('悪もの←悪者',lv=>M.matchJa(['悪者'],'悪もの',['わるもの'],lv),true);
+levels('のうさ業←農作業',lv=>M.matchJa(['農作業'],'のうさ業',['のうさぎょう'],lv),true);
+check('農作業の音の先頭だけではのうさぎょうにならない',M.yomiOf('農作業')!=='のうさぎょう');
+levels('悪もの←悪ものです',lv=>M.matchJa(['悪ものです'],'悪もの',['わるもの'],lv),[true,true,false]);
+levels('悪もの←乾燥は外れ',lv=>M.matchJa(['乾燥'],'悪もの',['わるもの'],lv),false);
+levels('花←悪者は外れ',lv=>M.matchJa(['悪者'],'花',['はな'],lv),false);
+levels('チェック 悪もの←悪者',lv=>M.judgeItem({t:'k',show:'悪もの',ans:['わるもの']},['悪者'],lv),true);
+levels('チェック のうさ業←農作業',lv=>M.judgeItem({t:'k',show:'のうさ業',ans:['のうさぎょう']},['農作業'],lv),true);
 check('乾の音かんは館に当たる',M.matchJa(['乾'],'館',['かん'],1)===true);
 check('乾の訓は館に当たらない',M.matchJa(['かわく'],'館',['かん'],1)===false);
 // 漢字タブ（学年を問わず）でも同じ連結。テスト用の語は通常モードの辞書に入れない
