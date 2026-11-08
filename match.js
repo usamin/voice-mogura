@@ -48,6 +48,11 @@ let jaOne=new Map(),jaAmb=new Set();
 // 常用漢字の音読み先頭一つ。シートに無い漢字を、2字以上の熟語で連結する。1字には使わない
 const onYomi=new Map();
 for(const part of String(G.YO_ON||'').split('|')){if(!part)continue;const y=normJa(part.slice(1));if(part[0]&&y)onYomi.set(part[0],y)}
+// 常用漢字の音を全部と、点つきの訓。1字の同音と送りがなに使う。熟語の連結は音の先頭のまま
+const kanjiOn=new Map(),kanjiKun=new Map();
+for(const part of String(G.YO_DICT||'').split('|')){if(!part)continue;const bits=part.split('/');const ch=bits[0];if(!ch)continue;
+ kanjiOn.set(ch,(bits[1]||'').split(',').map(normJa).filter(Boolean));
+ kanjiKun.set(ch,(bits[2]||'').split(',').map(s=>s.trim()).filter(Boolean))}
 const readParts=raw=>Array.isArray(raw)?raw:String(raw??'').split(/[、,，\/／]/);
 function setJaLexicon(rows){const acc=new Map();
  for(const row of rows||[]){if(!row)continue;const surface=normJa(row[0]);if(!surface)continue;
@@ -65,6 +70,33 @@ function yomiOf(n){if(!n)return '';if(jaOne.has(n))return jaOne.get(n);if(n.leng
   const ch=n[i];if(isKana(ch)){out+=ch;i++;continue}
   if(jaAmb.has(ch)||!onYomi.get(ch))return '';out+=onYomi.get(ch);i++}
  return out}
+// 0〜99999。1桁と10は和語の数えも入れる。三百・六百・八千のような音の変化も入れる
+function digitName(d,alt){return (alt?['','いち','に','さん','し','ご','ろく','しち','はち','く']:['','いち','に','さん','よん','ご','ろく','なな','はち','きゅう'])[d]||''}
+function senPart(d,alt){if(!d)return '';if(d===1)return 'せん';if(d===3)return 'さんぜん';if(d===8)return 'はっせん';return digitName(d,alt)+'せん'}
+function hyakuPart(d,alt){if(!d)return '';if(d===1)return 'ひゃく';if(d===3)return 'さんびゃく';if(d===6)return 'ろっぴゃく';if(d===8)return 'はっぴゃく';return digitName(d,alt)+'ひゃく'}
+function juPart(d,alt){if(!d)return '';if(d===1)return 'じゅう';return digitName(d,alt)+'じゅう'}
+function read4(n,alt){return senPart(Math.floor(n/1000),alt)+hyakuPart(Math.floor(n%1000/100),alt)+juPart(Math.floor(n%100/10),alt)+(n%10?digitName(n%10,alt):'')}
+function readNum(n,alt){if(n<10000)return read4(n,alt);const man=Math.floor(n/10000),rest=n%10000;return (man===1?'いち':read4(man,alt))+'まん'+(rest?read4(rest,alt):'')}
+function numberReadings(s){if(!/^[0-9]+$/.test(s)||s.length>5||(s.length>1&&s[0]==='0'))return [];const n=+s,out=new Set();
+ if(n===0){['れい','ゼロ','まる'].forEach(r=>out.add(r));return [...out]}
+ const c={1:['いち','ひと','ひとつ'],2:['に','ふた','ふたつ'],3:['さん','みっ','みっつ'],4:['よん','し','よ','よっ','よっつ'],5:['ご','いつ','いつつ'],6:['ろく','むっ','むっつ'],7:['なな','しち','ななつ'],8:['はち','やっ','やっつ'],9:['きゅう','く','ここの','ここのつ'],10:['じゅう','とお']};
+ if(c[n])c[n].forEach(r=>out.add(r));
+ const a=readNum(n,false),b=readNum(n,true);if(a)out.add(a);if(b)out.add(b);if(n===10000)out.add('まん');return [...out]}
+function addBare(ch,out){for(const r of kanjiOn.get(ch)||[])out.add(r);
+ for(const k of kanjiKun.get(ch)||[]){if(!k||k.includes('-')||k.includes('.'))continue;const y=normJa(k);if(y)out.add(y)}}
+function addOkuri(ch,suffix,out){let hit=false;
+ for(const k of kanjiKun.get(ch)||[]){if(!k||k.startsWith('-'))continue;const dot=k.indexOf('.');if(dot<0)continue;
+  const stem=normJa(k.slice(0,dot)),ok=normJa(k.slice(dot+1));if(!stem||!ok||ok!==suffix)continue;out.add(stem+ok);hit=true}
+ if(!hit)for(const r of kanjiOn.get(ch)||[])if(r)out.add(r+suffix)}
+// きこえた表記の読み。数字、1字の音と点のない訓、送りが点が一致する訓、漢字だけの熟語。
+// シートで複数読みの表記は空（球のたま/きゅうは、字を言っただけでは決めない）。
+function jaReadings(n){if(!n)return [];if(/^[0-9]+$/.test(n))return numberReadings(n);if(jaAmb.has(n))return [];
+ const out=new Set();if(jaOne.has(n))out.add(jaOne.get(n));
+ if(n.length===1){if(!isKana(n))addBare(n,out);return [...out]}
+ const m=/^([^\u3041-\u3096]+)([\u3041-\u3096]+)$/.exec(n);
+ if(m){if([...m[1]].length===1)addOkuri(m[1],m[2],out);return [...out]}
+ if([...n].every(ch=>!isKana(ch))){const y=yomiOf(n);if(y)out.add(y)}
+ return [...out]}
 function setJaLexiconFromTable(table){setJaLexicon(lexiconRows('kanji',table,[]))}
 // 通常モードは漢字表だけ。漢字テスト用のときだけ、そのタブの表記も同音の辞書に足す
 function lexiconRows(mode,kTable,ktRows){const rows=[];
@@ -102,7 +134,8 @@ function renderCheck(alts,ok,escFn){const esc=escFn||(s=>String(s)),heard=[];
  return 'きこえた「'+esc(heard[0]||'')+'」'
   +(heard.length>1?'<br><span class="missd">ほか: '+esc(heard.slice(1).join(' / '))+'</span>':'')
   +(ok?'<br><b class="okc">○ せいかい</b>':'<br><b class="ngc">× ちがう</b>')}
-function safeHomophone(n,ans){const r=yomiOf(n);return !!r&&ans.includes(r)}
+// 読みが正解のどれかと完全に同じなら、やさしさに関係なく当たり。きびしいが拒むのは文の途中と1文字ちがいだけ。
+function safeHomophone(n,ans){return jaReadings(n).some(r=>ans.includes(r))}
 function matchJa(alts,show,readings,lv=1){const ans=readings.map(normJa).filter(Boolean),sh=normJa(show);
  return alts.some(a=>{const n=normJa(a);if(!n)return false;
   if(safeHomophone(n,ans))return true;
@@ -120,5 +153,5 @@ function renderMiss(alts,prompts,escFn){const esc=escFn||(s=>String(s)),d=missDe
   +(d.heard.length>1?'<br><span class="missd">ほか: '+esc(d.heard.slice(1).join(' / '))+'</span>':'')
   +'<br><b class="ngc">❌ どのモグラとも ちがうよ</b>'
   +'<br><span class="missd">照合: '+esc(d.targets.join(' / '))+'</span>'}
-G.Matcher={matchEn,matchJa,matchSent,sentScore,normJa,lev,yomiOf,setJaLexicon,setJaLexiconFromTable,lexiconRows,nextKt,kanjiQuestions,moleOpen,countsAsMiss,reviewMisses,missDetail,renderMiss,checkList,checkNote,filterCheckItems,judgeItem,renderCheck};
+G.Matcher={matchEn,matchJa,matchSent,sentScore,normJa,lev,yomiOf,jaReadings,setJaLexicon,setJaLexiconFromTable,lexiconRows,nextKt,kanjiQuestions,moleOpen,countsAsMiss,reviewMisses,missDetail,renderMiss,checkList,checkNote,filterCheckItems,judgeItem,renderCheck};
 })(typeof window!='undefined'?window:globalThis);
