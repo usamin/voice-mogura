@@ -150,7 +150,6 @@ function renderCheck(alts,ok,escFn){const esc=escFn||(s=>String(s)),heard=[];
  return 'きこえた「'+esc(heard[0]||'')+'」'
   +(heard.length>1?'<br><span class="missd">ほか: '+esc(heard.slice(1).join(' / '))+'</span>':'')
   +(ok?'<br><b class="okc">○ せいかい</b>':'<br><b class="ngc">× ちがう</b>')}
-// 読みが正解のどれかと完全に同じなら、やさしさに関係なく当たり。きびしいが拒むのは文の途中と1文字ちがいだけ。
 // 読みの完全一致（音・訓の組み合わせを含む）は、やさしさに関係なく当たり。
 // きびしいが拒むのは文の途中と1文字ちがいだけ。混ぜ書き（悪もの）も、聞いた熟語の読みがシートの読みと一致すれば当たり。
 function safeHomophone(n,ans){return jaReadings(n).some(r=>ans.includes(r))||compoundMatches(n,ans)}
