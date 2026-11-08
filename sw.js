@@ -1,6 +1,7 @@
 importScripts('version.js');
 const C='mogura-'+self.APP_VER,F=['./','version.js','index.html','app.js','match.js','yomi.js','words.js','manifest.json','icon.svg'];
 self.addEventListener('install',e=>{self.skipWaiting();e.waitUntil(caches.open(C).then(c=>c.addAll(F)))});
+self.addEventListener('message',e=>{if(e.data&&e.data.type==='SKIP_WAITING')self.skipWaiting()});
 self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!=C).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
 // すべてネット優先（シートもゲーム本体も）、つながらないときだけキャッシュ
 self.addEventListener('fetch',e=>{if(e.request.method!='GET')return;const u=new URL(e.request.url);const sheet=u.hostname=='docs.google.com';

@@ -127,6 +127,33 @@ function countsAsMiss(m){return !!(m&&m.q&&!m.hit)}
 function reviewMisses(missed){const out=[];const seen=new Set();
  for(const q of missed||[]){if(!q||q.show==null||q.show==='')continue;const k=String(q.show);if(seen.has(k))continue;seen.add(k);out.push(q)}
  return out}
+// 間違えた問題はモードと学年ごとに残し、次の同じ遊びで先に出す。はつおんチェックでは使わない
+const qid=q=>(q&&q.t||'')+'\0'+(q&&q.show!=null?String(q.show):'');
+function missBucket(set){const S=set||{},mode=S.mode||'kanji',grade=+S.grade||0;
+ const eg=S.eLv==='same'||S.eLv==null||S.eLv===''?grade:+S.eLv||0;
+ if(mode==='ktest'||mode==='sent')return mode;
+ if(mode==='eng'||mode==='emix')return mode+':'+eg;
+ if(mode==='mix')return 'mix:'+grade+':'+eg;
+ return 'kanji:'+grade}
+function rememberMisses(store,bucket,items){const s=store&&typeof store==='object'&&!Array.isArray(store)?store:{};
+ const prev=Array.isArray(s[bucket])?s[bucket]:[],seen=new Set(prev.map(qid)),next=prev.slice();
+ for(const q of items||[]){if(!q||q.show==null||q.show==='')continue;const id=qid(q);if(seen.has(id))continue;seen.add(id);
+  next.push({t:q.t||'',show:String(q.show),ans:Array.isArray(q.ans)?q.ans.slice():[]})}
+ s[bucket]=next;return s}
+function forgetMiss(store,bucket,q){const s=store&&typeof store==='object'&&!Array.isArray(store)?store:{};
+ const id=qid(q);s[bucket]=(Array.isArray(s[bucket])?s[bucket]:[]).filter(x=>qid(x)!==id);return s}
+function dueMisses(store,bucket,pool){const saved=store&&Array.isArray(store[bucket])?store[bucket]:[],out=[];
+ for(const q of saved){const hit=(pool||[]).find(x=>x&&x.t===q.t&&String(x.show)===String(q.show));if(hit)out.push(hit)}
+ return out}
+function sameWord(a,b){return !!(a&&b&&a.t===b.t&&String(a.show)===String(b.show))}
+// 保存した間違いを、今見えていないものから順に返す。無ければ q は null
+function takeDue(due,pool,showing,cur){const P=pool||[],up=showing||[],rest=[];let picked=null;
+ const lang=q=>q&&q.t==='k'?'k':'e';
+ const blocked=q=>{if(!cur||!cur.q)return false;if(!(lang(q)!==lang(cur.q)||String(q.show)===String(cur.q.show)))return false;
+  return P.some(x=>lang(x)===lang(cur.q)&&String(x.show)!==String(cur.q.show))};
+ for(const q of due||[]){if(!q||!P.some(x=>sameWord(x,q)))continue;
+  if(!picked&&!up.some(s=>sameWord(s,q))&&!blocked(q))picked=q;else rest.push(q)}
+ return {q:picked,due:rest}}
 // はつおんチェック。ゲームと同じ学年・英語レベル・下の学年・判定を使い、得点や復習には入れない
 function gradesUpTo(n,lower){n=+n||0;if(!(n>=1))return [];return lower?[...Array(n).keys()].map(i=>i+1):[n]}
 function checkList(source,data,set){const S=set||{},d=data||{};
@@ -170,5 +197,5 @@ function renderMiss(alts,prompts,escFn){const esc=escFn||(s=>String(s)),d=missDe
   +(d.heard.length>1?'<br><span class="missd">ほか: '+esc(d.heard.slice(1).join(' / '))+'</span>':'')
   +'<br><b class="ngc">❌ どのモグラとも ちがうよ</b>'
   +'<br><span class="missd">照合: '+esc(d.targets.join(' / '))+'</span>'}
-G.Matcher={matchEn,matchJa,matchSent,sentScore,normJa,lev,yomiOf,jaReadings,setJaLexicon,setJaLexiconFromTable,lexiconRows,nextKt,kanjiQuestions,moleOpen,countsAsMiss,reviewMisses,missDetail,renderMiss,checkList,checkNote,filterCheckItems,judgeItem,renderCheck};
+G.Matcher={matchEn,matchJa,matchSent,sentScore,normJa,lev,yomiOf,jaReadings,setJaLexicon,setJaLexiconFromTable,lexiconRows,nextKt,kanjiQuestions,moleOpen,countsAsMiss,reviewMisses,missBucket,rememberMisses,forgetMiss,dueMisses,takeDue,missDetail,renderMiss,checkList,checkNote,filterCheckItems,judgeItem,renderCheck};
 })(typeof window!='undefined'?window:globalThis);
