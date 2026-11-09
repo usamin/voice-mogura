@@ -88,6 +88,22 @@ function addOkuri(ch,suffix,out){let hit=false;
  for(const k of kanjiKun.get(ch)||[]){if(!k||k.startsWith('-'))continue;const dot=k.indexOf('.');if(dot<0)continue;
   const stem=normJa(k.slice(0,dot)),ok=normJa(k.slice(dot+1));if(!stem||!ok||ok!==suffix)continue;out.add(stem+ok);hit=true}
  if(!hit)for(const r of kanjiOn.get(ch)||[])if(r)out.add(r+suffix)}
+// 熟語の中の1字。音を全部と、点の前の訓（悪+者 → わる+もの）。送りの仮名自体は足さない
+function pieceReadings(ch){if(isKana(ch))return [ch];const out=[],seen=new Set();
+ const add=r=>{if(r&&!seen.has(r)){seen.add(r);out.push(r)}};
+ for(const r of kanjiOn.get(ch)||[])add(r);
+ for(const k of kanjiKun.get(ch)||[]){if(!k||k.startsWith('-'))continue;const dot=k.indexOf('.');
+  const raw=(dot>=0?k.slice(0,dot):k).replace(/-+$/,'');if(!raw||raw.includes('-'))continue;add(normJa(raw))}
+ return out}
+// 各字の音・訓を連結して、正解の読みと完全一致するか。表記が混ぜ書きでも、聞いた熟語の読みで当たる
+function compoundMatches(n,ans){if(!n||[...n].length<2||jaAmb.has(n))return false;const chars=[...n];
+ if(chars.length>8||!chars.some(ch=>!isKana(ch)))return false;
+ const pieces=chars.map(pieceReadings);if(pieces.some(p=>!p.length))return false;
+ const targets=(ans||[]).filter(Boolean);if(!targets.length)return false;const maxLen=Math.max(...targets.map(t=>t.length));
+ function walk(i,acc){if(acc.length>maxLen)return false;if(i===chars.length)return targets.includes(acc);
+  if(!targets.some(t=>t.startsWith(acc)))return false;
+  for(const p of pieces[i])if(walk(i+1,acc+p))return true;return false}
+ return walk(0,'')}
 // きこえた表記の読み。数字、1字の音と点のない訓、送りが点が一致する訓、漢字だけの熟語。
 // シートで複数読みの表記は空（球のたま/きゅうは、字を言っただけでは決めない）。
 function jaReadings(n){if(!n)return [];if(/^[0-9]+$/.test(n))return numberReadings(n);if(jaAmb.has(n))return [];
@@ -111,6 +127,33 @@ function countsAsMiss(m){return !!(m&&m.q&&!m.hit)}
 function reviewMisses(missed){const out=[];const seen=new Set();
  for(const q of missed||[]){if(!q||q.show==null||q.show==='')continue;const k=String(q.show);if(seen.has(k))continue;seen.add(k);out.push(q)}
  return out}
+// 間違えた問題はモードと学年ごとに残し、次の同じ遊びで先に出す。はつおんチェックでは使わない
+const qid=q=>(q&&q.t||'')+'\0'+(q&&q.show!=null?String(q.show):'');
+function missBucket(set){const S=set||{},mode=S.mode||'kanji',grade=+S.grade||0;
+ const eg=S.eLv==='same'||S.eLv==null||S.eLv===''?grade:+S.eLv||0;
+ if(mode==='ktest'||mode==='sent')return mode;
+ if(mode==='eng'||mode==='emix')return mode+':'+eg;
+ if(mode==='mix')return 'mix:'+grade+':'+eg;
+ return 'kanji:'+grade}
+function rememberMisses(store,bucket,items){const s=store&&typeof store==='object'&&!Array.isArray(store)?store:{};
+ const prev=Array.isArray(s[bucket])?s[bucket]:[],seen=new Set(prev.map(qid)),next=prev.slice();
+ for(const q of items||[]){if(!q||q.show==null||q.show==='')continue;const id=qid(q);if(seen.has(id))continue;seen.add(id);
+  next.push({t:q.t||'',show:String(q.show),ans:Array.isArray(q.ans)?q.ans.slice():[]})}
+ s[bucket]=next;return s}
+function forgetMiss(store,bucket,q){const s=store&&typeof store==='object'&&!Array.isArray(store)?store:{};
+ const id=qid(q);s[bucket]=(Array.isArray(s[bucket])?s[bucket]:[]).filter(x=>qid(x)!==id);return s}
+function dueMisses(store,bucket,pool){const saved=store&&Array.isArray(store[bucket])?store[bucket]:[],out=[];
+ for(const q of saved){const hit=(pool||[]).find(x=>x&&x.t===q.t&&String(x.show)===String(q.show));if(hit)out.push(hit)}
+ return out}
+function sameWord(a,b){return !!(a&&b&&a.t===b.t&&String(a.show)===String(b.show))}
+// 保存した間違いを、今見えていないものから順に返す。無ければ q は null
+function takeDue(due,pool,showing,cur){const P=pool||[],up=showing||[],rest=[];let picked=null;
+ const lang=q=>q&&q.t==='k'?'k':'e';
+ const blocked=q=>{if(!cur||!cur.q)return false;if(!(lang(q)!==lang(cur.q)||String(q.show)===String(cur.q.show)))return false;
+  return P.some(x=>lang(x)===lang(cur.q)&&String(x.show)!==String(cur.q.show))};
+ for(const q of due||[]){if(!q||!P.some(x=>sameWord(x,q)))continue;
+  if(!picked&&!up.some(s=>sameWord(s,q))&&!blocked(q))picked=q;else rest.push(q)}
+ return {q:picked,due:rest}}
 // はつおんチェック。ゲームと同じ学年・英語レベル・下の学年・判定を使い、得点や復習には入れない
 function gradesUpTo(n,lower){n=+n||0;if(!(n>=1))return [];return lower?[...Array(n).keys()].map(i=>i+1):[n]}
 function checkList(source,data,set){const S=set||{},d=data||{};
@@ -134,8 +177,9 @@ function renderCheck(alts,ok,escFn){const esc=escFn||(s=>String(s)),heard=[];
  return 'きこえた「'+esc(heard[0]||'')+'」'
   +(heard.length>1?'<br><span class="missd">ほか: '+esc(heard.slice(1).join(' / '))+'</span>':'')
   +(ok?'<br><b class="okc">○ せいかい</b>':'<br><b class="ngc">× ちがう</b>')}
-// 読みが正解のどれかと完全に同じなら、やさしさに関係なく当たり。きびしいが拒むのは文の途中と1文字ちがいだけ。
-function safeHomophone(n,ans){return jaReadings(n).some(r=>ans.includes(r))}
+// 読みの完全一致（音・訓の組み合わせを含む）は、やさしさに関係なく当たり。
+// きびしいが拒むのは文の途中と1文字ちがいだけ。混ぜ書き（悪もの）も、聞いた熟語の読みがシートの読みと一致すれば当たり。
+function safeHomophone(n,ans){return jaReadings(n).some(r=>ans.includes(r))||compoundMatches(n,ans)}
 function matchJa(alts,show,readings,lv=1){const ans=readings.map(normJa).filter(Boolean),sh=normJa(show);
  return alts.some(a=>{const n=normJa(a);if(!n)return false;
   if(safeHomophone(n,ans))return true;
@@ -153,5 +197,5 @@ function renderMiss(alts,prompts,escFn){const esc=escFn||(s=>String(s)),d=missDe
   +(d.heard.length>1?'<br><span class="missd">ほか: '+esc(d.heard.slice(1).join(' / '))+'</span>':'')
   +'<br><b class="ngc">❌ どのモグラとも ちがうよ</b>'
   +'<br><span class="missd">照合: '+esc(d.targets.join(' / '))+'</span>'}
-G.Matcher={matchEn,matchJa,matchSent,sentScore,normJa,lev,yomiOf,jaReadings,setJaLexicon,setJaLexiconFromTable,lexiconRows,nextKt,kanjiQuestions,moleOpen,countsAsMiss,reviewMisses,missDetail,renderMiss,checkList,checkNote,filterCheckItems,judgeItem,renderCheck};
+G.Matcher={matchEn,matchJa,matchSent,sentScore,normJa,lev,yomiOf,jaReadings,setJaLexicon,setJaLexiconFromTable,lexiconRows,nextKt,kanjiQuestions,moleOpen,countsAsMiss,reviewMisses,missBucket,rememberMisses,forgetMiss,dueMisses,takeDue,missDetail,renderMiss,checkList,checkNote,filterCheckItems,judgeItem,renderCheck};
 })(typeof window!='undefined'?window:globalThis);
