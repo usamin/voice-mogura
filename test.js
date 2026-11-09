@@ -178,12 +178,12 @@ check('表示HTMLに認識と照合',rendered.includes('きこえた「'+esc('<�
 check('表示HTMLの照合',rendered.includes('照合: '+esc('局（きょく）')));
 check('ほかの候補',rendered.includes('ほか: '+esc('きょく')));
 check('単一候補にはほかを出さない',!M.renderMiss(['10'],[{t:'e',show:'ten',ans:[]}],esc).includes('ほか:'));
-check('認識結果を保存しない',(appSrc.match(/localStorage\.setItem\('([^']+)'/g)||[]).join()==="localStorage.setItem('moguraSet',localStorage.setItem('moguraSheet'");
+check('認識の文字列は保存しない',(appSrc.match(/localStorage\.setItem\('([^']+)'/g)||[]).join()==="localStorage.setItem('moguraSet',localStorage.setItem('moguraSheet',localStorage.setItem('moguraMiss'");
 check('照合は最終の不正解だけ',appSrc.includes("H.innerHTML=Matcher.renderMiss(alts,moles.filter(m=>m.q&&!m.hit).map(m=>({t:m.q.t,show:m.q.show,ans:m.q.ans})),esc)"));
 
 const self={};
 vm.runInNewContext(fs.readFileSync(root+'/version.js','utf8'),{self});
-check('版はv7.0.2',self.APP_VER==='v7.0.2');
+check('版はv8.0.0',self.APP_VER==='v8.0.0');
 check('更新日',self.APP_DATE==='2026/11/09');
 const sw=fs.readFileSync(root+'/sw.js','utf8');
 check('キャッシュ名はversion.js由来',sw.includes("importScripts('version.js')")&&sw.includes("const C='mogura-'+self.APP_VER"));
@@ -193,10 +193,14 @@ const precache=sw.slice(sw.indexOf('F=['),sw.indexOf('];')+1);
 for(const f of ['version.js','index.html','app.js','match.js','yomi.js','words.js'])check('事前キャッシュ '+f,precache.includes(f));
 check('テストは事前キャッシュしない',!precache.includes('test.js'));
 const C='mogura-'+self.APP_VER;
-check('小数の版もキャッシュ名にそのまま入る',C==='mogura-v7.0.2'&&C!=='mogura-v7'&&C!=='mogura-v7.0.1'&&C!=='mogura-v7.0.0'&&C!=='mogura-v6.1.2');
-const kept=['mogura-v5','mogura-v6','mogura-v6.1','mogura-v6.1.1','mogura-v6.1.2','mogura-v7','mogura-v7.0.0','mogura-v7.0.1',C,'other-cache'].filter(k=>k===C);
-check('v7.0.2以外のキャッシュ名は破棄される',kept.length===1&&kept[0]==='mogura-v7.0.2');
+check('小数の版もキャッシュ名にそのまま入る',C==='mogura-v8.0.0'&&C!=='mogura-v8'&&C!=='mogura-v7.0.2'&&C!=='mogura-v7.0.1'&&C!=='mogura-v7.0.0');
+const kept=['mogura-v5','mogura-v6','mogura-v6.1','mogura-v6.1.1','mogura-v6.1.2','mogura-v7','mogura-v7.0.0','mogura-v7.0.1','mogura-v7.0.2',C,'other-cache'].filter(k=>k===C);
+check('v8.0.0以外のキャッシュ名は破棄される',kept.length===1&&kept[0]==='mogura-v8.0.0');
 check('画面の折り返し',html.includes('#heard .missd')&&html.includes('overflow-wrap:anywhere'));
+check('更新ボタンが下の安全域の上に固定',html.includes('id="upd"')&&html.includes('↻')&&html.includes('viewport-fit=cover')&&html.includes('safe-area-inset-bottom')&&html.includes('aria-label="さいしんばんにする"'));
+check('更新ボタンは各画面の外',html.indexOf('id="upd"')>html.indexOf('id="pron"')&&!html.slice(html.indexOf('id="game"'),html.indexOf('id="end"')).includes('id="upd"'));
+check('更新はSWを取り直して再読み込み',appSrc.includes("type:'SKIP_WAITING'")&&appSrc.includes('reg.update()')&&appSrc.includes('caches.delete')&&appSrc.includes('location.replace'));
+check('SWは待機を飛ばせる',sw.includes("type==='SKIP_WAITING'")&&sw.includes('skipWaiting()'));
 check('設定に漢字テスト用がある',html.includes('value="ktest">漢字テスト用</option>')&&html.includes('id="ktestNote"'));
 
 // 漢字テスト用。公開シートには書かず、ここだけの文字列で確かめる
@@ -365,6 +369,27 @@ check('正解後はqを残してからdown',appSrc.includes('m.hit=true;const mm
 check('空き穴判定はmoleOpen',appSrc.includes('moles.filter(Matcher.moleOpen)'));
 check('開始時に時計と前回を止める',appSrc.includes('function stopClocks()')&&appSrc.includes('stopClocks();if(running)'));
 check('復習表示はreviewMisses',appSrc.includes('const u=Matcher.reviewMisses(missed)'));
+check('間違いは保存して次に先出し',appSrc.includes('Matcher.dueMisses')&&appSrc.includes('Matcher.rememberMisses')&&appSrc.includes('Matcher.forgetMiss')&&appSrc.includes("localStorage.getItem('moguraMiss')"));
+const pool=[{t:'k',show:'悪もの',ans:['わるもの']},{t:'k',show:'駅',ans:['えき']},{t:'e',show:'cat',ans:[]}];
+let store={};
+store=M.rememberMisses(store,M.missBucket({mode:'kanji',grade:3}),[{t:'k',show:'悪もの',ans:['わるもの']},{t:'k',show:'駅',ans:['えき']}]);
+store=M.rememberMisses(store,M.missBucket({mode:'kanji',grade:3}),[{t:'k',show:'悪もの',ans:['わるもの']}]);
+check('同じ間違いは重複しない',store['kanji:3'].length===2&&store['kanji:3'][0].show==='悪もの');
+check('先に出すのは保存順',M.dueMisses(store,'kanji:3',pool).map(q=>q.show).join()==='悪もの,駅');
+check('プールに無い間違いは出さない',M.dueMisses(store,'kanji:3',[{t:'k',show:'駅',ans:['えき']}]).map(q=>q.show).join()==='駅');
+store=M.rememberMisses(store,M.missBucket({mode:'eng',grade:3,eLv:'same'}),[{t:'e',show:'cat',ans:[]}]);
+store=M.rememberMisses(store,M.missBucket({mode:'kanji',grade:4}),[{t:'k',show:'駅',ans:['えき']}]);
+check('モードと学年は別',M.dueMisses(store,'kanji:3',pool).length===2&&M.dueMisses(store,'eng:3',pool).map(q=>q.show).join()==='cat'&&M.dueMisses(store,'kanji:4',pool).map(q=>q.show).join()==='駅');
+check('文と漢字テスト用は学年で分けない',M.missBucket({mode:'sent',grade:6})==='sent'&&M.missBucket({mode:'ktest',grade:2})==='ktest'&&M.missBucket({mode:'eng',grade:1,eLv:'8'})==='eng:8');
+store=M.forgetMiss(store,'kanji:3',{t:'k',show:'悪もの'});
+check('正解した問題はリストから外す',M.dueMisses(store,'kanji:3',pool).map(q=>q.show).join()==='駅'&&store['eng:3'][0].show==='cat');
+const first=M.takeDue([{t:'k',show:'悪もの'},{t:'k',show:'駅'}],pool,[],null);
+check('次の出題は間違いが先',first.q.show==='悪もの'&&first.due.map(q=>q.show).join()==='駅');
+const second=M.takeDue(first.due,pool,[{t:'k',show:'駅'}],null);
+check('見えている間違いは飛ばす',second.q==null&&second.due.map(q=>q.show).join()==='駅');
+const engCur={q:{t:'e',show:'dog',ans:[]}};
+const blocked=M.takeDue([{t:'k',show:'悪もの'},{t:'e',show:'cat'}],pool,[],engCur);
+check('いまの言語と合う間違いを先に出す',blocked.q.show==='cat'&&blocked.due.map(q=>q.show).join()==='悪もの');
 check('認識の照合もhitを除く',appSrc.includes('moles.some(m=>m.q&&!m.hit)')&&appSrc.includes('moles.filter(m=>m.q&&!m.hit)'));
 
 for(const mode of ['kanji','eng','sent','emix','mix','ktest']){

@@ -1,12 +1,12 @@
 <!DOCTYPE html><html lang="ja"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="theme-color" content="#7cc96b">
 <link rel="manifest" href="manifest.json"><link rel="apple-touch-icon" href="icon.svg">
 <title>こえでモグラ / Voice Mogura</title>
 <style>
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-body{margin:0;font-family:"Hiragino Maru Gothic ProN","Rounded Mplus 1c",sans-serif;background:linear-gradient(#bfe9ff,#9be38a 40%);min-height:100vh;color:#4a3a2a;text-align:center;user-select:none}
-.scr{display:none;padding:16px;max-width:520px;margin:auto}.scr.on{display:block}
+body{margin:0;font-family:"Hiragino Maru Gothic ProN","Rounded Mplus 1c",sans-serif;background:linear-gradient(#bfe9ff,#9be38a 40%);min-height:100vh;min-height:100dvh;color:#4a3a2a;text-align:center;user-select:none;padding-top:env(safe-area-inset-top);padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)}
+.scr{display:none;padding:16px;padding-bottom:64px;padding-bottom:calc(64px + env(safe-area-inset-bottom));max-width:520px;margin:auto}.scr.on{display:block}
 h1{font-size:30px;margin:20px 0;color:#7a4b1e;text-shadow:2px 2px #fff}
 button{font:inherit;font-size:20px;border:0;border-radius:30px;padding:14px 28px;margin:8px;background:#ff8a3d;color:#fff;box-shadow:0 5px #c2581b}
 button:active{transform:translateY(4px);box-shadow:0 1px #c2581b}button.sub{background:#8a6ad8;box-shadow:0 5px #5b40a8}
@@ -39,12 +39,14 @@ button:active{transform:translateY(4px);box-shadow:0 1px #c2581b}button.sub{back
 .glow{animation:glw 1s infinite alternate}@keyframes glw{to{opacity:.5}}
 .mole .fx{display:none;white-space:nowrap;left:-20%;width:140%!important;position:absolute;top:-10px;width:100%;font-size:22px;font-weight:bold;color:#00bcd4;text-shadow:0 0 4px #fff,0 0 8px #fff;z-index:5}.mole .fx.on{display:block;animation:fxu 1s forwards}@keyframes fxu{to{transform:translateY(-40px);opacity:0}}
 .hole{clip-path:inset(-64px -30px 0 -30px)!important}
-#ver{position:fixed;bottom:8px;left:0;right:0;font-size:12px;color:#555}
+#ver{position:fixed;left:8px;right:60px;bottom:18px;bottom:calc(18px + env(safe-area-inset-bottom));font-size:12px;color:#555;pointer-events:none}
+#upd{position:fixed;z-index:40;right:max(10px,env(safe-area-inset-right));bottom:10px;bottom:calc(10px + env(safe-area-inset-bottom));width:44px;height:44px;margin:0;padding:0;border-radius:50%;border:2px solid #e6c98a;background:#fffbe9;color:#7a4b1e;box-shadow:0 2px #c4a574;font-size:22px;line-height:1;display:flex;align-items:center;justify-content:center;-webkit-appearance:none;appearance:none}
+#upd:active{transform:translateY(1px);box-shadow:0 1px #c4a574}
 #pList{max-height:48vh;overflow:auto;-webkit-overflow-scrolling:touch;margin-top:8px}
 #pList button{display:block;width:100%;margin:6px 0;padding:10px 12px;background:#fff;color:#4a3a2a;box-shadow:none;border-radius:12px;text-align:left;font-size:18px;white-space:normal;height:auto}
 #pWord{font-size:32px;font-weight:bold;text-align:center;word-break:break-word}#pWord.sent{font-size:22px;line-height:1.35}
 #pRead{text-align:center;font-size:18px;margin:4px 0 8px}#pHeard{min-height:48px;background:#fff8;border-radius:14px;padding:8px;font-size:18px;overflow-wrap:anywhere;text-align:center}
-#pron{padding-bottom:28px}
+#pron{padding-bottom:64px;padding-bottom:calc(64px + env(safe-area-inset-bottom))}
 </style></head><body>
 <div id="home" class="scr on"><h1>🎤 こえで<br>モグラたたき 🔨</h1>
 <p class="card">モグラがもっている<b>かんじ</b>や<b>えいご</b>を<br>こえに出して よもう！<br>ただしく よめたら ポカッ！</p>
@@ -73,4 +75,5 @@ button:active{transform:translateY(4px);box-shadow:0 1px #c2581b}button.sub{back
 <div id="pSay" class="card" style="display:none"><div id="pWord"></div><div id="pRead"></div><div id="pHeard">…</div><div id="pMic"></div>
 <button id="pRetry">もういちど</button><button class="sub" id="pBackList">リストにもどる</button></div>
 <button class="sub" id="pHome">タイトル</button></div>
+<button type="button" id="upd" aria-label="さいしんばんにする">↻</button>
 <script src="version.js"></script><script src="words.js"></script><script src="yomi.js"></script><script src="match.js"></script><script src="app.js"></script></body></html>
