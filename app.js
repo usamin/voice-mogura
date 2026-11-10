@@ -84,6 +84,7 @@ function writeMissStore(o){try{localStorage.setItem('moguraMiss',JSON.stringify(
 function readBest(){try{const o=JSON.parse(localStorage.getItem('moguraBest')||'{}');return o&&typeof o==='object'?o:{}}catch(e){return {}}}
 function writeBest(o){try{localStorage.setItem('moguraBest',JSON.stringify(o||{}))}catch(e){}}
 function paintBest(){const n=Matcher.bestScore(readBest(),Matcher.missBucket(S));const el=$('best');if(el)el.textContent=n?'きろく ⭐ '+n:'きろく まだない'}
+function resetBest(){writeBest(Matcher.clearBest(readBest(),Matcher.missBucket(S)));paintBest();const box=$('ask');if(box)box.classList.remove('on')}
 function paintStreak(){const el=$('streak');if(el)el.textContent=streak?'🔥×'+streak:''}
 function clearSavedMiss(q){if(!q)return;for(let i=missed.length-1;i>=0;i--)if(missed[i]&&missed[i].t===q.t&&String(missed[i].show)===String(q.show))missed.splice(i,1);
  due=due.filter(x=>!(x.t===q.t&&String(x.show)===String(q.show)));const store=readMissStore();Matcher.forgetMiss(store,Matcher.missBucket(S),q);writeMissStore(store)}
@@ -131,6 +132,9 @@ function end(){if(!running&&!moles.some(m=>m.q)){show('end');return}running=fals
  const u=Matcher.reviewMisses(missed);const store=readMissStore();Matcher.rememberMisses(store,Matcher.missBucket(S),u);writeMissStore(store);
  $('miss').innerHTML=u.length?'<b>れんしゅうしよう</b><br>'+u.map(q=>esc(q.show)+(q.t=='k'?'（'+esc(q.ans.join('・'))+'）':'')).join('<br>'):'ぜんぶ たたけたね！すごい！';show('end');tone(660,.2);setTimeout(()=>tone(990,.4),200)}
 $('ver').textContent=APP_VER+'・'+APP_DATE;paintBest();
+$('clearBest').onclick=()=>$('ask').classList.add('on');
+$('askNo').onclick=()=>$('ask').classList.remove('on');
+$('askYes').onclick=resetBest;
 $('go').onclick=start;$('again').onclick=start;$('quit').onclick=end;$('home2').onclick=()=>{paintBest();show('home')};
 // はつおんチェック。マイクと一覧だけで、モグラ・得点・タイマー・復習は触らない
 let prec=null,pItem=null;
@@ -155,14 +159,18 @@ $('toCheck').onclick=showPron;$('pSrc').onchange=renderPronList;$('pFind').oninp
 $('pRetry').onclick=()=>{if(!pItem)return;$('pHeard').textContent='…';listenPron()};
 $('pBackList').onclick=()=>{stopPrec();pItem=null;$('pSay').style.display='none';$('pPick').style.display='block'};
 $('pHome').onclick=()=>{stopPrec();pItem=null;show('home')};
-if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js');
-// ホーム画面に追加したPWAには再読み込みが無い。ここから最新の版を取り直す
+try{sessionStorage.removeItem('moguraReloading')}catch(e){}
+if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js',{updateViaCache:'none'});
+// ホーム画面に追加したPWAには再読み込みが無い。新しいSWが制御したら一度だけ読み直す
+let reloading=false;
+function reloadOnce(){if(reloading||sessionStorage.getItem('moguraReloading')==='1')return;reloading=true;sessionStorage.setItem('moguraReloading','1');const u=new URL(location.href);u.searchParams.set('upd',String(Date.now()));location.replace(u.href)}
 async function forceUpdate(){const b=$('upd');if(b)b.disabled=true;try{
  if(window.caches){const ks=await caches.keys();await Promise.all(ks.filter(k=>k.startsWith('mogura-')&&k!=='mogura-'+APP_VER).map(k=>caches.delete(k)))}
  if(navigator.serviceWorker){const reg=await navigator.serviceWorker.getRegistration();
-  if(reg){const tell=w=>{try{w&&w.postMessage({type:'SKIP_WAITING'})}catch(e){}};tell(reg.waiting);
+  if(reg){const tell=w=>{try{w&&w.postMessage({type:'SKIP_WAITING'})}catch(e){}};
+   navigator.serviceWorker.addEventListener('controllerchange',reloadOnce);tell(reg.waiting);
    try{await Promise.race([reg.update(),new Promise(r=>setTimeout(r,4000))])}catch(e){}
    tell(reg.waiting);tell(reg.installing);const w=reg.installing||reg.waiting;
    if(w&&w.state!=='activated')await new Promise(res=>{const t=setTimeout(res,2500);w.addEventListener('statechange',()=>{if(w.state==='activated'||w.state==='redundant'){clearTimeout(t);res()}})})}}
-}catch(e){}const u=new URL(location.href);u.searchParams.set('upd',String(Date.now()));location.replace(u.href)}
+}catch(e){}reloadOnce()}
 $('upd').onclick=forceUpdate;
