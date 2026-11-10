@@ -6,7 +6,7 @@ function syncKtestNote(){const n=$('ktestNote');if(n)n.style.display=$('sMode').
 function loadSet(){$('sELv').value=S.eLv;$('sJudge').value=S.judge;$('sGrade').value=S.grade;$('sMode').value=S.mode;$('sTime').value=S.time;$('sSpeed').value=S.speed;$('sLower').checked=S.lower;syncKtestNote()}
 $('toSet').onclick=()=>{loadSet();show('set')};
 $('sMode').onchange=syncKtestNote;
-$('save').onclick=()=>{S={eLv:$('sELv').value,judge:+$('sJudge').value,grade:+$('sGrade').value,mode:$('sMode').value,time:+$('sTime').value,speed:+$('sSpeed').value,lower:$('sLower').checked};localStorage.setItem('moguraSet',JSON.stringify(S));bindLex();refreshHint();show('home')};
+$('save').onclick=()=>{S={eLv:$('sELv').value,judge:+$('sJudge').value,grade:+$('sGrade').value,mode:$('sMode').value,time:+$('sTime').value,speed:+$('sSpeed').value,lower:$('sLower').checked};localStorage.setItem('moguraSet',JSON.stringify(S));bindLex();refreshHint();paintBest();show('home')};
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
 if(!SR)$('warn').textContent='このブラウザは おんせいにんしきに たいおうしていません（iPhoneはSafari、AndroidはChromeでひらいてね）';
 // audio
@@ -78,9 +78,13 @@ ${c.aura?`<ellipse class="glow" cx="120" cy="70" rx="115" ry="70" fill="url(#a${
 <text class="x" x="120" y="72" text-anchor="middle" font-size="20" font-weight="bold" fill="#000">✕ ✕</text>
 <path d="M108 88 Q120 94 132 88" stroke="#000" stroke-width="2" fill="none"/><path d="M111 89 l2 6 l2 -5 M129 89 l-2 6 l-2 -5" fill="#fff"/><circle cx="113" cy="80" r="1.8"/><circle cx="127" cy="80" r="1.8"/>${c.extra}</svg>`;
 const DEFS='<svg width="0" height="0" style="position:absolute">'+[DRG.g,DRG.d].map(c=>`<defs><radialGradient id="a${c.id}"><stop offset="0" stop-color="#ffd600" stop-opacity=".8"/><stop offset="1" stop-color="#ffd600" stop-opacity="0"/></radialGradient><linearGradient id="b${c.id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${c.b1}"/><stop offset="1" stop-color="${c.b2}"/></linearGradient></defs>`).join('')+'</svg>';
-let moles=[],score,left,timer,spawnT,P,running=false,rec,lang,missed,due=[];
+let moles=[],score,left,timer,spawnT,P,running=false,rec,lang,missed,due=[],streak=0;
 function readMissStore(){try{const o=JSON.parse(localStorage.getItem('moguraMiss')||'{}');return o&&typeof o==='object'?o:{}}catch(e){return {}}}
 function writeMissStore(o){try{localStorage.setItem('moguraMiss',JSON.stringify(o||{}))}catch(e){}}
+function readBest(){try{const o=JSON.parse(localStorage.getItem('moguraBest')||'{}');return o&&typeof o==='object'?o:{}}catch(e){return {}}}
+function writeBest(o){try{localStorage.setItem('moguraBest',JSON.stringify(o||{}))}catch(e){}}
+function paintBest(){const n=Matcher.bestScore(readBest(),Matcher.missBucket(S));const el=$('best');if(el)el.textContent=n?'きろく ⭐ '+n:'きろく まだない'}
+function paintStreak(){const el=$('streak');if(el)el.textContent=streak?'🔥×'+streak:''}
 function clearSavedMiss(q){if(!q)return;for(let i=missed.length-1;i>=0;i--)if(missed[i]&&missed[i].t===q.t&&String(missed[i].show)===String(q.show))missed.splice(i,1);
  due=due.filter(x=>!(x.t===q.t&&String(x.show)===String(q.show)));const store=readMissStore();Matcher.forgetMiss(store,Matcher.missBucket(S),q);writeMissStore(store)}
 function build(){$('field').innerHTML=DEFS;moles=[];for(let i=0;i<9;i++){const h=document.createElement('div');h.className='hole';h.innerHTML='<div class="mole"><div class="tg">👇 よんで！</div><div class="bub"></div><div class="w"></div><div class="f">• ᴥ •</div>'+dsvg(DRG.g)+dsvg(DRG.d)+'<span class="pts"></span><div class="fx"></div></div>';$('field').appendChild(h);moles.push({el:h.firstChild,q:null,to:0})}}
@@ -88,7 +92,7 @@ function spawn(){if(!running)return;const free=moles.filter(Matcher.moleOpen);co
  if(free.length&&active<(S.mode=='mix'?1:2)){const m=free[Math.random()*free.length|0];let q;
   const cur=moles.find(x=>x.q&&!x.hit);const picked=Matcher.takeDue(due,P,moles.filter(x=>x.q).map(x=>x.q),cur);due=picked.due;q=picked.q;
   if(!q)do q=P[Math.random()*P.length|0];while(cur&&(LG(q)!=LG(cur.q)||q.show==cur.q.show)&&P.some(x=>LG(x)==LG(cur.q)&&x.show!=cur.q.show));
-  m.kind=(r=>r<.09?'g':r<.18?'d':'')(Math.random());m.el.classList.remove('dg','dd');if(m.kind)m.el.classList.add('d'+m.kind);m.el.querySelector('.pts').textContent=m.kind=='g'?'20':m.kind=='d'?'+2秒':'';
+  const dragon=Matcher.streakAfter(streak,'spawn');streak=dragon.n;paintStreak();m.kind=dragon.dragon?(Math.random()<.5?'g':'d'):'';m.el.classList.remove('dg','dd');if(m.kind)m.el.classList.add('d'+m.kind);m.el.querySelector('.pts').textContent=m.kind=='g'?'20':m.kind=='d'?'+2秒':'';
   m.hit=false;m.q=q;const W=m.el.querySelector('.w');W.textContent=q.show;W.classList.toggle('sent',q.t=='s');W.style.fontSize=q.t=='s'?(q.show.length>16?'11px':'13px'):q.show.length>9?'13px':q.show.length>6?'16px':'22px';m.el.classList.remove('hit');m.born=Date.now();m.el.classList.add('up');mark();sPop();
   m.born=Date.now();m.to=setTimeout(()=>{if(Matcher.countsAsMiss(m)){missed.push(m.q);sMiss();down(m)}},q.t=='s'?S.speed*1.6:S.speed);setLang();}
  spawnT=setTimeout(spawn,900)}
@@ -99,7 +103,7 @@ function setLang(){const m=moles.find(x=>x.q&&!x.hit);const want=m?(m.q.t!='k'?'
 // alts: 認識候補ぜんぶ。見えているモグラ全員と照らし合わせて、当たったモグラを返す
 function check(alts){const hits=[];moles.forEach(m=>{if(!m.q||m.hit)return;
  const J=S.judge??1,ok=m.q.t=='s'?Matcher.matchSent(alts,m.q.show,m.q.ans,J):m.q.t=='e'?Matcher.matchEn(alts,m.q.show,m.q.ans,J):Matcher.matchJa(alts,m.q.show,m.q.ans,J);
- if(ok){hits.push(m.q.show);clearSavedMiss(m.q);score+=m.kind=='g'?20:10;if(m.kind=='d'){left+=2;$('time').textContent=left;const fx=m.el.querySelector('.fx');fx.textContent='+2びょう！';fx.classList.remove('on');void fx.offsetWidth;fx.classList.add('on')}$('score').textContent=score;m.el.classList.add('hit');m.el.classList.remove('target');sHit();
+ if(ok){hits.push(m.q.show);clearSavedMiss(m.q);streak=Matcher.streakAfter(streak,'hit').n;paintStreak();score+=m.kind=='g'?20:10;if(m.kind=='d'){left+=2;$('time').textContent=left;const fx=m.el.querySelector('.fx');fx.textContent='+2びょう！';fx.classList.remove('on');void fx.offsetWidth;fx.classList.add('on')}$('score').textContent=score;m.el.classList.add('hit');m.el.classList.remove('target');sHit();
   const b=m.el.querySelector('.bub');b.textContent='⭕ '+alts[0];b.classList.add('on');setTimeout(()=>b.classList.remove('on'),900);
   // 正解しても消えるまで q を残す。すぐ空けると、隠れた穴に別の問題が入って復習に紛れ込む
   clearTimeout(m.to);m.to=0;m.hit=true;const mm=m;setTimeout(()=>down(mm),400)}});return hits}
@@ -108,7 +112,7 @@ function listen(){if(!running||!SR)return;rec=new SR();rec.lang=lang;rec.interim
  rec.onresult=e=>{for(let i=e.resultIndex;i<e.results.length;i++){const r=e.results[i],alts=[];for(let j=0;j<r.length;j++)alts.push(r[j].transcript);
   const hits=check(alts),H=$('heard');
   if(hits.length){H.innerHTML='きこえた「'+esc(alts[0])+'」<br><b class="okc">⭕ '+hits.map(esc).join('・')+' に あたり！</b>';try{rec.abort()}catch(x){}}
-  else if(r.isFinal&&moles.some(m=>m.q&&!m.hit)){H.innerHTML=Matcher.renderMiss(alts,moles.filter(m=>m.q&&!m.hit).map(m=>({t:m.q.t,show:m.q.show,ans:m.q.ans})),esc);sMiss()}
+  else if(r.isFinal&&moles.some(m=>m.q&&!m.hit)){H.innerHTML=Matcher.renderMiss(alts,moles.filter(m=>m.q&&!m.hit).map(m=>({t:m.q.t,show:m.q.show,ans:m.q.ans})),esc);streak=Matcher.streakAfter(streak,'wrong').n;paintStreak();sMiss()}
   else H.innerHTML='きこえた「'+esc(alts[0])+'」…'}};
  rec.onerror=e=>{if(e.error=='not-allowed'||e.error=='service-not-allowed'){$('mic').textContent='⚠️ マイクがきょかされていません';running&&end()}};
  rec.onend=()=>{if(running)setTimeout(listen,150)};try{rec.start()}catch(e){setTimeout(listen,500)}}
@@ -117,15 +121,17 @@ function stopClocks(){clearInterval(timer);timer=0;clearTimeout(spawnT);spawnT=0
 async function start(){if(!SR){alert('おんせいにんしきが つかえません');return}
  AC=AC||new (window.AudioContext||window.webkitAudioContext)();AC.resume();$('heard').textContent='じゅんびちゅう…';await Promise.race([sheetReady,new Promise(r=>setTimeout(r,2500))]);P=pool();if(S.mode==='ktest'&&!P.length){$('warn').textContent=KTEST_HINT;show('home');return}if(!P.length){alert('もんだいが ありません（せっていかシートを見てね）');return}
  stopClocks();if(running){moles.forEach(m=>{if(Matcher.countsAsMiss(m))missed.push(m.q)});const store=readMissStore();Matcher.rememberMisses(store,Matcher.missBucket(S),Matcher.reviewMisses(missed));writeMissStore(store);running=false;moles.forEach(down);try{rec&&rec.abort()}catch(e){}}
- score=0;left=S.time;missed=[];due=Matcher.dueMisses(readMissStore(),Matcher.missBucket(S),P);$('score').textContent=0;$('time').textContent=left;$('heard').textContent='…';
+ score=0;left=S.time;missed=[];streak=Matcher.streakAfter(0,'start').n;paintStreak();due=Matcher.dueMisses(readMissStore(),Matcher.missBucket(S),P);$('score').textContent=0;$('time').textContent=left;$('heard').textContent='…';
  build();show('game');running=true;lang=/eng|sent|emix/.test(S.mode)?'en-US':'ja-JP';mark();listen();spawn();
  timer=setInterval(()=>{$('time').textContent=--left;if(left<=0)end()},1000)}
 function end(){if(!running&&!moles.some(m=>m.q)){show('end');return}running=false;stopClocks();
  moles.forEach(m=>{if(Matcher.countsAsMiss(m))missed.push(m.q);down(m)});try{rec&&rec.abort()}catch(e){}
- $('final').textContent='⭐ '+score;const u=Matcher.reviewMisses(missed);const store=readMissStore();Matcher.rememberMisses(store,Matcher.missBucket(S),u);writeMissStore(store);
+ $('final').textContent='⭐ '+score;const rec=Matcher.recordScore(readBest(),Matcher.missBucket(S),score);writeBest(rec.store);paintBest();
+ const recEl=$('rec');if(recEl)recEl.innerHTML=(rec.beat?'<span class="hi">しんきろく！</span><br>':'')+(rec.best?'きろく ⭐ '+rec.best:'きろく まだない');
+ const u=Matcher.reviewMisses(missed);const store=readMissStore();Matcher.rememberMisses(store,Matcher.missBucket(S),u);writeMissStore(store);
  $('miss').innerHTML=u.length?'<b>れんしゅうしよう</b><br>'+u.map(q=>esc(q.show)+(q.t=='k'?'（'+esc(q.ans.join('・'))+'）':'')).join('<br>'):'ぜんぶ たたけたね！すごい！';show('end');tone(660,.2);setTimeout(()=>tone(990,.4),200)}
-$('ver').textContent=APP_VER+'・'+APP_DATE;
-$('go').onclick=start;$('again').onclick=start;$('quit').onclick=end;$('home2').onclick=()=>show('home');
+$('ver').textContent=APP_VER+'・'+APP_DATE;paintBest();
+$('go').onclick=start;$('again').onclick=start;$('quit').onclick=end;$('home2').onclick=()=>{paintBest();show('home')};
 // はつおんチェック。マイクと一覧だけで、モグラ・得点・タイマー・復習は触らない
 let prec=null,pItem=null;
 function stopPrec(){try{prec&&prec.abort()}catch(e){}prec=null}
