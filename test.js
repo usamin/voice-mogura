@@ -429,7 +429,10 @@ check('漢字テスト用の記録に学年は入らない',rec.store.ktest===40
 check('0点は記録にしない',M.recordScore({},'kanji:3',0).beat===false&&M.bestScore({},'kanji:3')===0);
 const wiped=M.clearBest({ 'kanji:3':30,'kanji:4':50,ktest:40 },M.missBucket({mode:'kanji',grade:3}));
 check('きろくをけすのはいまの学年だけ',wiped['kanji:3']==null&&wiped['kanji:4']===50&&wiped.ktest===40&&M.bestScore(wiped,'kanji:3')===0);
-check('きろくをけすボタンと確認',html.includes('id="clearBest">きろくをけす</button>')&&html.includes('このモード・学年の最高得点をけしますか？')&&appSrc.includes('Matcher.clearBest(readBest(),Matcher.missBucket(S))'));
+const homeHtml=html.slice(html.indexOf('id="home"'),html.indexOf('id="set"'));
+const setHtml=html.slice(html.indexOf('id="set"'),html.indexOf('id="game"'));
+check('せっていからさいこうきろくをけす',setHtml.includes('id="clearBest"')&&setHtml.includes('いまのモード・学年のさいこうきろくをけす')&&!homeHtml.includes('clearBest')&&!homeHtml.includes('きろくをけす')&&html.includes('このモード・学年の最高得点をけしますか？')&&appSrc.includes('Matcher.clearBest(readBest(),Matcher.missBucket(selectedSet()))')&&appSrc.includes("mode:$('sMode').value"));
+check('さいこうきろくを大きく',html.includes('>さいこうきろく まだない</p>')&&html.includes('#best{font-weight:bold;font-size:28px')&&html.includes('#rec{font-size:28px')&&appSrc.includes("?'さいこうきろく ⭐ '+n:'さいこうきろく まだない'")&&appSrc.includes("rec.best?'さいこうきろく ⭐ '+rec.best:'さいこうきろく まだない'")&&!appSrc.includes("'きろく "));
 check('認識の照合もhitを除く',appSrc.includes('moles.some(m=>m.q&&!m.hit)')&&appSrc.includes('moles.filter(m=>m.q&&!m.hit)'));
 
 for(const mode of ['kanji','eng','sent','emix','mix','ktest']){

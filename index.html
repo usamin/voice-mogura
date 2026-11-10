@@ -14,11 +14,11 @@ button:active{transform:translateY(4px);box-shadow:0 1px #c2581b}button.sub{back
 .card label{display:block;margin:10px 0 4px;font-weight:bold}select,input{font:inherit;font-size:18px;width:100%;padding:6px;border-radius:10px}
 #hud{display:flex;justify-content:space-between;align-items:center;font-size:22px;font-weight:bold}
 #streak{font-size:18px;min-width:3em}
-#best{font-weight:bold;font-size:18px;margin:4px 0}
-#clearBest{font-size:16px;padding:8px 18px;margin:0 0 8px}
+#best{font-weight:bold;font-size:28px;margin:8px 0 10px;line-height:1.3}
+#clearBest{display:block;width:100%;max-width:360px;margin:8px auto;font-size:16px;padding:12px 14px;white-space:normal;line-height:1.35;height:auto}
 #ask{display:none;position:fixed;z-index:50;inset:0;background:rgba(74,58,42,.35);align-items:center;justify-content:center;padding:16px}
 #ask.on{display:flex}#ask .card{max-width:360px;text-align:center;margin:0}
-#rec{font-size:20px;font-weight:bold;min-height:1.4em}#rec .hi{color:#e53935;font-size:28px}
+#rec{font-size:28px;font-weight:bold;min-height:1.4em;line-height:1.3}#rec .hi{color:#e53935;font-size:32px}
 #field{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:14px 0}
 .hole{position:relative;height:120px;overflow:hidden}
 .hole:after{content:"";position:absolute;bottom:0;left:8%;width:84%;height:30px;background:#5b3a1e;border-radius:50%}
@@ -56,8 +56,7 @@ button:active{transform:translateY(4px);box-shadow:0 1px #c2581b}button.sub{back
 </style></head><body>
 <div id="home" class="scr on"><h1>🎤 こえで<br>モグラたたき 🔨</h1>
 <p class="card">モグラがもっている<b>かんじ</b>や<b>えいご</b>を<br>こえに出して よもう！<br>ただしく よめたら ポカッ！</p>
-<p id="best">きろく まだない</p>
-<button type="button" class="sub" id="clearBest">きろくをけす</button><br>
+<p id="best">さいこうきろく まだない</p>
 <button id="go">スタート</button><br><button class="sub" id="toCheck">はつおんチェック</button><br><button class="sub" id="toSet">せってい</button>
 <p id="warn" style="color:#c00"></p><div id="ver"></div></div>
 <div id="set" class="scr"><h1>せってい</h1><div class="card">
@@ -69,7 +68,8 @@ button:active{transform:translateY(4px);box-shadow:0 1px #c2581b}button.sub{back
 <label>じかん（びょう）</label><select id="sTime"><option>10</option><option>20</option><option>30</option><option>60</option><option>90</option><option>120</option></select>
 <label>モグラのはやさ</label><select id="sSpeed"><option value="8000">ゆっくり</option><option value="5000">ふつう</option><option value="3500">はやい</option></select>
 <label><input type="checkbox" id="sLower" style="width:auto"> 下の学年の問題もまぜる</label>
-</div><button id="save">もどる</button></div>
+</div><button type="button" class="sub" id="clearBest">いまのモード・学年のさいこうきろくをけす</button>
+<button id="save">もどる</button></div>
 <div id="game" class="scr"><div id="hud"><span>⭐ <b id="score">0</b></span><span id="streak"></span><span>⏰ <b id="time">0</b></span></div>
 <div id="lang" class="ja"></div><div id="field"></div><div id="heard">…</div><div id="mic">🎤 じゅんびちゅう</div>
 <button class="sub" id="quit" style="font-size:16px;padding:8px 18px">やめる</button></div>
