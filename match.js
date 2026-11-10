@@ -170,6 +170,7 @@ function streakAfter(n,ev){n=+n||0;if(ev==='wrong'||ev==='start')return {n:0,dra
 function bestScore(store,bucket){const n=store&&typeof store==='object'?store[bucket]:0;return typeof n==='number'&&isFinite(n)&&n>0?n:0}
 function recordScore(store,bucket,score){const s=store&&typeof store==='object'&&!Array.isArray(store)?Object.assign({},store):{};
  const prev=bestScore(s,bucket),n=+score||0,beat=n>prev;if(beat)s[bucket]=n;return {store:s,beat,best:beat?n:prev}}
+function clearBest(store,bucket){const s=store&&typeof store==='object'&&!Array.isArray(store)?Object.assign({},store):{};delete s[bucket];return s}
 // はつおんチェック。ゲームと同じ学年・英語レベル・下の学年・判定を使い、得点や復習には入れない
 function gradesUpTo(n,lower){n=+n||0;if(!(n>=1))return [];return lower?[...Array(n).keys()].map(i=>i+1):[n]}
 function checkList(source,data,set){const S=set||{},d=data||{};
@@ -213,5 +214,5 @@ function renderMiss(alts,prompts,escFn){const esc=escFn||(s=>String(s)),d=missDe
   +(d.heard.length>1?'<br><span class="missd">ほか: '+esc(d.heard.slice(1).join(' / '))+'</span>':'')
   +'<br><b class="ngc">❌ どのモグラとも ちがうよ</b>'
   +'<br><span class="missd">照合: '+esc(d.targets.join(' / '))+'</span>'}
-G.Matcher={matchEn,matchJa,matchSent,sentScore,normJa,lev,yomiOf,jaReadings,setJaLexicon,setJaLexiconFromTable,lexiconRows,nextKt,kanjiQuestions,moleOpen,countsAsMiss,reviewMisses,missBucket,rememberMisses,forgetMiss,dueMisses,takeDue,streakAfter,bestScore,recordScore,missDetail,renderMiss,checkList,checkNote,filterCheckItems,judgeItem,renderCheck};
+G.Matcher={matchEn,matchJa,matchSent,sentScore,normJa,lev,yomiOf,jaReadings,setJaLexicon,setJaLexiconFromTable,lexiconRows,nextKt,kanjiQuestions,moleOpen,countsAsMiss,reviewMisses,missBucket,rememberMisses,forgetMiss,dueMisses,takeDue,streakAfter,bestScore,recordScore,clearBest,missDetail,renderMiss,checkList,checkNote,filterCheckItems,judgeItem,renderCheck};
 })(typeof window!='undefined'?window:globalThis);
