@@ -178,13 +178,13 @@ check('表示HTMLに認識と照合',rendered.includes('きこえた「'+esc('<�
 check('表示HTMLの照合',rendered.includes('照合: '+esc('局（きょく）')));
 check('ほかの候補',rendered.includes('ほか: '+esc('きょく')));
 check('単一候補にはほかを出さない',!M.renderMiss(['10'],[{t:'e',show:'ten',ans:[]}],esc).includes('ほか:'));
-check('認識の文字列は保存しない',(appSrc.match(/localStorage\.setItem\('([^']+)'/g)||[]).join()==="localStorage.setItem('moguraSet',localStorage.setItem('moguraSheet',localStorage.setItem('moguraMiss'");
+check('認識の文字列は保存しない',(appSrc.match(/localStorage\.setItem\('([^']+)'/g)||[]).join()==="localStorage.setItem('moguraSet',localStorage.setItem('moguraSheet',localStorage.setItem('moguraMiss',localStorage.setItem('moguraBest'");
 check('照合は最終の不正解だけ',appSrc.includes("H.innerHTML=Matcher.renderMiss(alts,moles.filter(m=>m.q&&!m.hit).map(m=>({t:m.q.t,show:m.q.show,ans:m.q.ans})),esc)"));
 
 const self={};
 vm.runInNewContext(fs.readFileSync(root+'/version.js','utf8'),{self});
-check('版はv8.0.0',self.APP_VER==='v8.0.0');
-check('更新日',self.APP_DATE==='2026/11/09');
+check('版はv9.0.0',self.APP_VER==='v9.0.0');
+check('更新日',self.APP_DATE==='2026/11/10');
 const sw=fs.readFileSync(root+'/sw.js','utf8');
 check('キャッシュ名はversion.js由来',sw.includes("importScripts('version.js')")&&sw.includes("const C='mogura-'+self.APP_VER"));
 check('古いキャッシュを消す',sw.includes('ks.filter(k=>k!=C)'));
@@ -193,9 +193,9 @@ const precache=sw.slice(sw.indexOf('F=['),sw.indexOf('];')+1);
 for(const f of ['version.js','index.html','app.js','match.js','yomi.js','words.js'])check('事前キャッシュ '+f,precache.includes(f));
 check('テストは事前キャッシュしない',!precache.includes('test.js'));
 const C='mogura-'+self.APP_VER;
-check('小数の版もキャッシュ名にそのまま入る',C==='mogura-v8.0.0'&&C!=='mogura-v8'&&C!=='mogura-v7.0.2'&&C!=='mogura-v7.0.1'&&C!=='mogura-v7.0.0');
-const kept=['mogura-v5','mogura-v6','mogura-v6.1','mogura-v6.1.1','mogura-v6.1.2','mogura-v7','mogura-v7.0.0','mogura-v7.0.1','mogura-v7.0.2',C,'other-cache'].filter(k=>k===C);
-check('v8.0.0以外のキャッシュ名は破棄される',kept.length===1&&kept[0]==='mogura-v8.0.0');
+check('小数の版もキャッシュ名にそのまま入る',C==='mogura-v9.0.0'&&C!=='mogura-v9'&&C!=='mogura-v8.0.0'&&C!=='mogura-v8'&&C!=='mogura-v7.0.2');
+const kept=['mogura-v5','mogura-v6','mogura-v6.1','mogura-v6.1.1','mogura-v6.1.2','mogura-v7','mogura-v7.0.0','mogura-v7.0.1','mogura-v7.0.2','mogura-v8','mogura-v8.0.0',C,'other-cache'].filter(k=>k===C);
+check('v9.0.0以外のキャッシュ名は破棄される',kept.length===1&&kept[0]==='mogura-v9.0.0');
 check('画面の折り返し',html.includes('#heard .missd')&&html.includes('overflow-wrap:anywhere'));
 check('更新ボタンが下の安全域の上に固定',html.includes('id="upd"')&&html.includes('↻')&&html.includes('viewport-fit=cover')&&html.includes('safe-area-inset-bottom')&&html.includes('aria-label="さいしんばんにする"'));
 check('更新ボタンは各画面の外',html.indexOf('id="upd"')>html.indexOf('id="pron"')&&!html.slice(html.indexOf('id="game"'),html.indexOf('id="end"')).includes('id="upd"'));
@@ -291,6 +291,17 @@ levels('悪もの←乾燥は外れ',lv=>M.matchJa(['乾燥'],'悪もの',['わ�
 levels('花←悪者は外れ',lv=>M.matchJa(['悪者'],'花',['はな'],lv),false);
 levels('チェック 悪もの←悪者',lv=>M.judgeItem({t:'k',show:'悪もの',ans:['わるもの']},['悪者'],lv),true);
 levels('チェック のうさ業←農作業',lv=>M.judgeItem({t:'k',show:'のうさ業',ans:['のうさぎょう']},['農作業'],lv),true);
+levels('保険係→ほけん係',lv=>M.matchJa(['保険係'],'ほけん係',['ほけんがかり'],lv),true);
+levels('チェック 保険係→ほけん係',lv=>M.judgeItem({t:'k',show:'ほけん係',ans:['ほけんがかり']},['保険係'],lv),true);
+levels('保険係ですは途中なので外れ',lv=>M.matchJa(['保険係です'],'ほけん係',['ほけんがかり'],lv),false);
+check('保健係もほけんがかりなら当たる',M.matchJa(['保健係'],'ほけん係',['ほけんがかり'],2)===true);
+check('火災係はほけん係に当たらない',M.matchJa(['火災係'],'ほけん係',['ほけんがかり'],2)===false);
+check('保険係は大豆に当たらない',M.matchJa(['保険係'],'大豆',['だいず'],2)===false);
+check('豆撒きは豆まきに当たらない',M.matchJa(['豆撒き'],'豆まき',['まめまき'],2)===false);
+const lexNow=M.lexiconRows('kanji',builtin,[]);
+M.setJaLexicon(M.lexiconRows('kanji',{},[]));
+for(const [heard,yomi] of [['保険係','ほけんがかり'],['目薬','めぐすり'],['草笛','くさぶえ'],['鉄板','てっぱん'],['薬局','やっきょく'],['列車','れっしゃ'],['出血','しゅっけつ'],['勝負','しょうぶ'],['電波','でんぱ'],['役立つ','やくだつ']])check(heard+'は'+yomi+'になる',M.matchJa([heard],'〓',[yomi],2)===true);
+M.setJaLexicon(lexNow);
 check('乾の音かんは館に当たる',M.matchJa(['乾'],'館',['かん'],1)===true);
 check('乾の訓は館に当たらない',M.matchJa(['かわく'],'館',['かん'],1)===false);
 // 漢字タブ（学年を問わず）でも同じ連結。テスト用の語は通常モードの辞書に入れない
@@ -390,6 +401,28 @@ check('見えている間違いは飛ばす',second.q==null&&second.due.map(q=>q
 const engCur={q:{t:'e',show:'dog',ans:[]}};
 const blocked=M.takeDue([{t:'k',show:'悪もの'},{t:'e',show:'cat'}],pool,[],engCur);
 check('いまの言語と合う間違いを先に出す',blocked.q.show==='cat'&&blocked.due.map(q=>q.show).join()==='悪もの');
+let st=M.streakAfter(0,'start');
+st=M.streakAfter(st.n,'hit');st=M.streakAfter(st.n,'hit');
+check('2連続ではドラゴンでない',M.streakAfter(st.n,'spawn').dragon===false&&M.streakAfter(st.n,'spawn').n===2);
+st=M.streakAfter(st.n,'hit');
+const spawned=M.streakAfter(st.n,'spawn');
+check('3連続の次の出現がドラゴン',spawned.dragon===true&&spawned.n===0);
+check('ドラゴンの次はすぐ出ない',M.streakAfter(spawned.n,'spawn').dragon===false);
+check('ドラゴンを叩くとまた数える',M.streakAfter(spawned.n,'hit').n===1);
+check('不正解で連続は0',M.streakAfter(2,'wrong').n===0&&M.streakAfter(M.streakAfter(2,'wrong').n,'spawn').dragon===false);
+check('開始で連続は0',M.streakAfter(3,'start').n===0);
+check('4回でもドラゴンは1匹',M.streakAfter(4,'spawn').dragon===true&&M.streakAfter(4,'spawn').n===0);
+check('きろくはモードと学年',html.includes('id="best"')&&html.includes('id="rec"')&&html.includes('id="streak"')&&appSrc.includes("localStorage.getItem('moguraBest')")&&appSrc.includes('しんきろく')&&appSrc.includes("streakAfter(streak,'hit')")&&appSrc.includes("streakAfter(streak,'spawn')")&&appSrc.includes("streakAfter(streak,'wrong')")&&!appSrc.includes("r<.09"));
+let best={};
+let rec=M.recordScore(best,M.missBucket({mode:'kanji',grade:3}),30);
+check('初回の点が新記録',rec.beat&&rec.best===30&&rec.store['kanji:3']===30);
+rec=M.recordScore(rec.store,M.missBucket({mode:'kanji',grade:3}),10);
+check('下回っても記録は残る',!rec.beat&&rec.best===30&&rec.store['kanji:3']===30);
+rec=M.recordScore(rec.store,M.missBucket({mode:'kanji',grade:4}),50);
+check('学年の記録は別',rec.beat&&rec.store['kanji:3']===30&&rec.store['kanji:4']===50);
+rec=M.recordScore(rec.store,M.missBucket({mode:'ktest',grade:6}),40);
+check('漢字テスト用の記録に学年は入らない',rec.store.ktest===40&&M.missBucket({mode:'ktest',grade:1})==='ktest'&&M.missBucket({mode:'sent',grade:2})==='sent');
+check('0点は記録にしない',M.recordScore({},'kanji:3',0).beat===false&&M.bestScore({},'kanji:3')===0);
 check('認識の照合もhitを除く',appSrc.includes('moles.some(m=>m.q&&!m.hit)')&&appSrc.includes('moles.filter(m=>m.q&&!m.hit)'));
 
 for(const mode of ['kanji','eng','sent','emix','mix','ktest']){
@@ -445,6 +478,7 @@ const pronSrc=appSrc.slice(appSrc.indexOf('function stopPrec'),appSrc.indexOf("$
 check('はつおんの処理がある',pronSrc.includes('function stopPrec')&&pronSrc.includes('Matcher.judgeItem')&&pronSrc.includes('Matcher.checkList')&&pronSrc.includes('Matcher.renderCheck')&&pronSrc.includes('ja-JP')&&pronSrc.includes('en-US'));
 check('はつおんは復習に足さない',!pronSrc.includes('missed')&&!pronSrc.includes('reviewMisses'));
 check('はつおんは得点とタイマーを変えない',!pronSrc.includes('score')&&!pronSrc.includes('spawn')&&!pronSrc.includes('moles')&&!pronSrc.includes('stopClocks'));
+check('はつおんはきろくと連続正解を変えない',!pronSrc.includes('moguraBest')&&!pronSrc.includes('streakAfter')&&!pronSrc.includes('recordScore'));
 check('厳しさは設定のまま',pronSrc.includes('S.judge??1'));
 check('ゲームの開始はそのまま',appSrc.includes("P=pool();if(S.mode==='ktest'&&!P.length)")&&appSrc.includes('const u=Matcher.reviewMisses(missed)'));
 

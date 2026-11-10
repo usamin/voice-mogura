@@ -1,2 +1,2 @@
 // バージョンはここだけで管理（sw.js も読み込む）
-self.APP_VER='v8.0.0';self.APP_DATE='2026/11/09';
+self.APP_VER='v9.0.0';self.APP_DATE='2026/11/10';

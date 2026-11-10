@@ -88,17 +88,24 @@ function addOkuri(ch,suffix,out){let hit=false;
  for(const k of kanjiKun.get(ch)||[]){if(!k||k.startsWith('-'))continue;const dot=k.indexOf('.');if(dot<0)continue;
   const stem=normJa(k.slice(0,dot)),ok=normJa(k.slice(dot+1));if(!stem||!ok||ok!==suffix)continue;out.add(stem+ok);hit=true}
  if(!hit)for(const r of kanjiOn.get(ch)||[])if(r)out.add(r+suffix)}
-// 熟語の中の1字。音を全部と、点の前の訓（悪+者 → わる+もの）。送りの仮名自体は足さない
-function pieceReadings(ch){if(isKana(ch))return [ch];const out=[],seen=new Set();
- const add=r=>{if(r&&!seen.has(r)){seen.add(r);out.push(r)}};
- for(const r of kanjiOn.get(ch)||[])add(r);
+// 連濁とか行の半濁。先頭の字には付けない（か→が、は→ば/ぱ）
+const DAKU={か:'が',き:'ぎ',く:'ぐ',け:'げ',こ:'ご',さ:'ざ',し:'じ',す:'ず',せ:'ぜ',そ:'ぞ',た:'だ',ち:'ぢ',つ:'づ',て:'で',と:'ど',は:'ば',ひ:'び',ふ:'ぶ',へ:'べ',ほ:'ぼ'};
+const HANDAKU={は:'ぱ',ひ:'ぴ',ふ:'ぷ',へ:'ぺ',ほ:'ぽ'};
+// 熟語の中の1字。音を全部と、点の前の訓（悪+者 → わる+もの）。送りの仮名自体は足さない。
+// 先頭以外は連濁、末尾以外のき・く・ち・つは促音。シートの読みと全文が一致するときだけ当たる
+function pieceReadings(ch,pos,last){if(isKana(ch))return [ch];const base=[],seen=new Set();
+ const add=(r,o)=>{if(r&&!seen.has(r)){seen.add(r);o.push(r)}};
+ for(const r of kanjiOn.get(ch)||[])add(r,base);
  for(const k of kanjiKun.get(ch)||[]){if(!k||k.startsWith('-'))continue;const dot=k.indexOf('.');
-  const raw=(dot>=0?k.slice(0,dot):k).replace(/-+$/,'');if(!raw||raw.includes('-'))continue;add(normJa(raw))}
+  const raw=(dot>=0?k.slice(0,dot):k).replace(/-+$/,'');if(!raw||raw.includes('-'))continue;add(normJa(raw),base)}
+ const out=base.slice();
+ if(pos>0)for(const r of base){const d=DAKU[r[0]];if(d)add(d+r.slice(1),out);const h=HANDAKU[r[0]];if(h)add(h+r.slice(1),out)}
+ if(!last)for(const r of out.slice())if(r.length>1&&/[きくちつ]$/.test(r))add(r.slice(0,-1)+'っ',out);
  return out}
 // 各字の音・訓を連結して、正解の読みと完全一致するか。表記が混ぜ書きでも、聞いた熟語の読みで当たる
 function compoundMatches(n,ans){if(!n||[...n].length<2||jaAmb.has(n))return false;const chars=[...n];
  if(chars.length>8||!chars.some(ch=>!isKana(ch)))return false;
- const pieces=chars.map(pieceReadings);if(pieces.some(p=>!p.length))return false;
+ const pieces=chars.map((ch,i)=>pieceReadings(ch,i,i===chars.length-1));if(pieces.some(p=>!p.length))return false;
  const targets=(ans||[]).filter(Boolean);if(!targets.length)return false;const maxLen=Math.max(...targets.map(t=>t.length));
  function walk(i,acc){if(acc.length>maxLen)return false;if(i===chars.length)return targets.includes(acc);
   if(!targets.some(t=>t.startsWith(acc)))return false;
@@ -154,6 +161,15 @@ function takeDue(due,pool,showing,cur){const P=pool||[],up=showing||[],rest=[];l
  for(const q of due||[]){if(!q||!P.some(x=>sameWord(x,q)))continue;
   if(!picked&&!up.some(s=>sameWord(s,q))&&!blocked(q))picked=q;else rest.push(q)}
  return {q:picked,due:rest}}
+// 連続正解。3回たまった次の出現がドラゴン1匹で、出現したとき0に戻る。不正解で0。はつおんチェックでは使わない
+function streakAfter(n,ev){n=+n||0;if(ev==='wrong'||ev==='start')return {n:0,dragon:false};
+ if(ev==='hit')return {n:n+1,dragon:false};
+ if(ev==='spawn')return n>=3?{n:0,dragon:true}:{n:n,dragon:false};
+ return {n:n,dragon:false}}
+// 最高点。モードと学年は間違えた問題と同じ分け方。0点では記録にならない
+function bestScore(store,bucket){const n=store&&typeof store==='object'?store[bucket]:0;return typeof n==='number'&&isFinite(n)&&n>0?n:0}
+function recordScore(store,bucket,score){const s=store&&typeof store==='object'&&!Array.isArray(store)?Object.assign({},store):{};
+ const prev=bestScore(s,bucket),n=+score||0,beat=n>prev;if(beat)s[bucket]=n;return {store:s,beat,best:beat?n:prev}}
 // はつおんチェック。ゲームと同じ学年・英語レベル・下の学年・判定を使い、得点や復習には入れない
 function gradesUpTo(n,lower){n=+n||0;if(!(n>=1))return [];return lower?[...Array(n).keys()].map(i=>i+1):[n]}
 function checkList(source,data,set){const S=set||{},d=data||{};
@@ -197,5 +213,5 @@ function renderMiss(alts,prompts,escFn){const esc=escFn||(s=>String(s)),d=missDe
   +(d.heard.length>1?'<br><span class="missd">ほか: '+esc(d.heard.slice(1).join(' / '))+'</span>':'')
   +'<br><b class="ngc">❌ どのモグラとも ちがうよ</b>'
   +'<br><span class="missd">照合: '+esc(d.targets.join(' / '))+'</span>'}
-G.Matcher={matchEn,matchJa,matchSent,sentScore,normJa,lev,yomiOf,jaReadings,setJaLexicon,setJaLexiconFromTable,lexiconRows,nextKt,kanjiQuestions,moleOpen,countsAsMiss,reviewMisses,missBucket,rememberMisses,forgetMiss,dueMisses,takeDue,missDetail,renderMiss,checkList,checkNote,filterCheckItems,judgeItem,renderCheck};
+G.Matcher={matchEn,matchJa,matchSent,sentScore,normJa,lev,yomiOf,jaReadings,setJaLexicon,setJaLexiconFromTable,lexiconRows,nextKt,kanjiQuestions,moleOpen,countsAsMiss,reviewMisses,missBucket,rememberMisses,forgetMiss,dueMisses,takeDue,streakAfter,bestScore,recordScore,missDetail,renderMiss,checkList,checkNote,filterCheckItems,judgeItem,renderCheck};
 })(typeof window!='undefined'?window:globalThis);
