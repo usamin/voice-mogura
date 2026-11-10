@@ -83,7 +83,8 @@ function readMissStore(){try{const o=JSON.parse(localStorage.getItem('moguraMiss
 function writeMissStore(o){try{localStorage.setItem('moguraMiss',JSON.stringify(o||{}))}catch(e){}}
 function readBest(){try{const o=JSON.parse(localStorage.getItem('moguraBest')||'{}');return o&&typeof o==='object'?o:{}}catch(e){return {}}}
 function writeBest(o){try{localStorage.setItem('moguraBest',JSON.stringify(o||{}))}catch(e){}}
-function paintBest(){const n=Matcher.bestScore(readBest(),Matcher.missBucket(S));const el=$('best');if(el)el.textContent=n?'さいこうきろく ⭐ '+n:'さいこうきろく まだない'}
+function bestLines(n){return '<span class="cap">さいこうきろく</span><span class="pts">'+(n?'⭐'+n+'⭐':'まだないよ')+'</span>'}
+function paintBest(){const n=Matcher.bestScore(readBest(),Matcher.missBucket(S));const el=$('best');if(el)el.innerHTML=bestLines(n)}
 function selectedSet(){return {eLv:$('sELv').value,grade:+$('sGrade').value,mode:$('sMode').value}}
 function resetBest(){writeBest(Matcher.clearBest(readBest(),Matcher.missBucket(selectedSet())));paintBest();const box=$('ask');if(box)box.classList.remove('on')}
 function paintStreak(){const el=$('streak');if(el)el.textContent=streak?'🔥×'+streak:''}
@@ -129,7 +130,7 @@ async function start(){if(!SR){alert('おんせいにんしきが つかえま�
 function end(){if(!running&&!moles.some(m=>m.q)){show('end');return}running=false;stopClocks();
  moles.forEach(m=>{if(Matcher.countsAsMiss(m))missed.push(m.q);down(m)});try{rec&&rec.abort()}catch(e){}
  $('final').textContent='⭐ '+score;const rec=Matcher.recordScore(readBest(),Matcher.missBucket(S),score);writeBest(rec.store);paintBest();
- const recEl=$('rec');if(recEl)recEl.innerHTML=(rec.beat?'<span class="hi">しんきろく！</span><br>':'')+(rec.best?'さいこうきろく ⭐ '+rec.best:'さいこうきろく まだない');
+ const recEl=$('rec');if(recEl)recEl.innerHTML=(rec.beat?'<span class="hi">しんきろく！</span>':'')+bestLines(rec.best);
  const u=Matcher.reviewMisses(missed);const store=readMissStore();Matcher.rememberMisses(store,Matcher.missBucket(S),u);writeMissStore(store);
  $('miss').innerHTML=u.length?'<b>れんしゅうしよう</b><br>'+u.map(q=>esc(q.show)+(q.t=='k'?'（'+esc(q.ans.join('・'))+'）':'')).join('<br>'):'ぜんぶ たたけたね！すごい！';show('end');tone(660,.2);setTimeout(()=>tone(990,.4),200)}
 $('ver').textContent=APP_VER+'・'+APP_DATE;paintBest();

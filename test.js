@@ -432,7 +432,7 @@ check('きろくをけすのはいまの学年だけ',wiped['kanji:3']==null&&wi
 const homeHtml=html.slice(html.indexOf('id="home"'),html.indexOf('id="set"'));
 const setHtml=html.slice(html.indexOf('id="set"'),html.indexOf('id="game"'));
 check('せっていからさいこうきろくをけす',setHtml.includes('id="clearBest"')&&setHtml.includes('いまのモード・学年のさいこうきろくをけす')&&!homeHtml.includes('clearBest')&&!homeHtml.includes('きろくをけす')&&html.includes('このモード・学年の最高得点をけしますか？')&&appSrc.includes('Matcher.clearBest(readBest(),Matcher.missBucket(selectedSet()))')&&appSrc.includes("mode:$('sMode').value"));
-check('さいこうきろくを大きく',html.includes('>さいこうきろく まだない</p>')&&html.includes('#best{font-weight:bold;font-size:28px')&&html.includes('#rec{font-size:28px')&&appSrc.includes("?'さいこうきろく ⭐ '+n:'さいこうきろく まだない'")&&appSrc.includes("rec.best?'さいこうきろく ⭐ '+rec.best:'さいこうきろく まだない'")&&!appSrc.includes("'きろく "));
+check('さいこうきろくは2行',html.includes('<span class="cap">さいこうきろく</span><span class="pts">まだないよ</span>')&&html.includes('#best .cap,#rec .cap{display:block;font-size:28px')&&html.includes('#best .pts,#rec .pts{display:block;font-size:44px')&&appSrc.includes("n?'⭐'+n+'⭐':'まだないよ'")&&appSrc.includes("(rec.beat?'<span class=\"hi\">しんきろく！</span>':'')+bestLines(rec.best)")&&!appSrc.includes("'きろく "));
 check('認識の照合もhitを除く',appSrc.includes('moles.some(m=>m.q&&!m.hit)')&&appSrc.includes('moles.filter(m=>m.q&&!m.hit)'));
 
 for(const mode of ['kanji','eng','sent','emix','mix','ktest']){
