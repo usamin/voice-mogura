@@ -1,12 +1,11 @@
 const $=id=>document.getElementById(id),show=s=>document.querySelectorAll('.scr').forEach(e=>e.classList.toggle('on',e.id==s));
 const DEF={grade:3,eLv:'same',mode:'kanji',time:60,speed:5000,lower:false,judge:1};
 let S=Object.assign({},DEF,JSON.parse(localStorage.getItem('moguraSet')||'{}'));
+function writeSet(){try{localStorage.setItem('moguraSet',JSON.stringify(S))}catch(e){}}
 for(let g=1;g<=6;g++)$('sGrade').innerHTML+=`<option value="${g}">${g}ねんせい</option>`;
-function syncKtestNote(){const n=$('ktestNote');if(n)n.style.display=$('sMode').value==='ktest'?'block':'none'}
-function loadSet(){$('sELv').value=S.eLv;$('sJudge').value=S.judge;$('sGrade').value=S.grade;$('sMode').value=S.mode;$('sTime').value=S.time;$('sSpeed').value=S.speed;$('sLower').checked=S.lower;syncKtestNote()}
+function loadSet(){$('sELv').value=S.eLv;$('sJudge').value=S.judge;$('sGrade').value=S.grade;$('sTime').value=S.time;$('sSpeed').value=S.speed;$('sLower').checked=S.lower}
 $('toSet').onclick=()=>{loadSet();show('set')};
-$('sMode').onchange=syncKtestNote;
-$('save').onclick=()=>{S={eLv:$('sELv').value,judge:+$('sJudge').value,grade:+$('sGrade').value,mode:$('sMode').value,time:+$('sTime').value,speed:+$('sSpeed').value,lower:$('sLower').checked};localStorage.setItem('moguraSet',JSON.stringify(S));bindLex();refreshHint();paintBest();show('home')};
+$('save').onclick=()=>{S={eLv:$('sELv').value,judge:+$('sJudge').value,grade:+$('sGrade').value,mode:S.mode,time:+$('sTime').value,speed:+$('sSpeed').value,lower:$('sLower').checked};writeSet();bindLex();refreshHint();paintBest();paintModes();show('home')};
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
 if(!SR)$('warn').textContent='このブラウザは おんせいにんしきに たいおうしていません（iPhoneはSafari、AndroidはChromeでひらいてね）';
 // audio
@@ -85,7 +84,16 @@ function readBest(){try{const o=JSON.parse(localStorage.getItem('moguraBest')||'
 function writeBest(o){try{localStorage.setItem('moguraBest',JSON.stringify(o||{}))}catch(e){}}
 function bestLines(n){return '<span class="cap">さいこうきろく</span><span class="pts">'+(n?'⭐'+n+'⭐':'まだないよ')+'</span>'}
 function paintBest(){const n=Matcher.bestScore(readBest(),Matcher.missBucket(S));const el=$('best');if(el)el.innerHTML=bestLines(n)}
-function selectedSet(){return {eLv:$('sELv').value,grade:+$('sGrade').value,mode:$('sMode').value}}
+function selectedSet(){return {eLv:$('sELv').value,grade:+$('sGrade').value,mode:S.mode}}
+function paintModes(){document.querySelectorAll('#modes button').forEach(b=>{const on=b.dataset.mode===S.mode;b.classList.toggle('on',on);b.setAttribute('aria-pressed',on?'true':'false')});const n=$('modeNote');if(n)n.textContent=S.mode==='ktest'?'シートの「漢字テスト用」だけ出ます。学年は使いません。':''}
+function pickMode(mode){if(!mode)return;S.mode=mode;writeSet();bindLex();refreshHint();paintBest();paintModes()}
+function canSpeak(){return !!(window.speechSynthesis&&window.SpeechSynthesisUtterance)}
+function speakEn(text){if(!canSpeak()||text==null||text==='')return;const synth=window.speechSynthesis;synth.cancel();const u=new SpeechSynthesisUtterance(String(text));u.lang='en-US';u.rate=0.85;const voices=typeof synth.getVoices==='function'?synth.getVoices():[];const v=voices.find(x=>/en-US/i.test(x.lang))||voices.find(x=>/^en/i.test(x.lang));if(v)u.voice=v;setTimeout(()=>synth.speak(u),50)}
+function fillReview(list){const box=$('miss');box.innerHTML='';if(!list.length){box.textContent='ぜんぶ たたけたね！すごい！';return}
+ const h=document.createElement('b');h.textContent='れんしゅうしよう';box.appendChild(h);
+ list.forEach(q=>{const row=document.createElement('div');row.className='mrow';const lab=document.createElement('span');lab.textContent=q.show+(q.t=='k'&&q.ans&&q.ans.length?'（'+q.ans.join('・')+'）':'');row.appendChild(lab);
+  if(Matcher.speakable(q)&&canSpeak()){const b=document.createElement('button');b.type='button';b.className='spk';b.textContent='🔊';b.setAttribute('aria-label','おてほんをきく');b.onclick=ev=>{ev.preventDefault();speakEn(q.show)};row.appendChild(b)}
+  box.appendChild(row)})}
 function resetBest(){writeBest(Matcher.clearBest(readBest(),Matcher.missBucket(selectedSet())));paintBest();const box=$('ask');if(box)box.classList.remove('on')}
 function paintStreak(){const el=$('streak');if(el)el.textContent=streak?'🔥×'+streak:''}
 function clearSavedMiss(q){if(!q)return;for(let i=missed.length-1;i>=0;i--)if(missed[i]&&missed[i].t===q.t&&String(missed[i].show)===String(q.show))missed.splice(i,1);
@@ -132,8 +140,10 @@ function end(){if(!running&&!moles.some(m=>m.q)){show('end');return}running=fals
  $('final').textContent='⭐ '+score;const rec=Matcher.recordScore(readBest(),Matcher.missBucket(S),score);writeBest(rec.store);paintBest();
  const recEl=$('rec');if(recEl)recEl.innerHTML=(rec.beat?'<span class="hi">しんきろく！</span>':'')+bestLines(rec.best);
  const u=Matcher.reviewMisses(missed);const store=readMissStore();Matcher.rememberMisses(store,Matcher.missBucket(S),u);writeMissStore(store);
- $('miss').innerHTML=u.length?'<b>れんしゅうしよう</b><br>'+u.map(q=>esc(q.show)+(q.t=='k'?'（'+esc(q.ans.join('・'))+'）':'')).join('<br>'):'ぜんぶ たたけたね！すごい！';show('end');tone(660,.2);setTimeout(()=>tone(990,.4),200)}
-$('ver').textContent=APP_VER+'・'+APP_DATE;paintBest();
+ fillReview(u);show('end');tone(660,.2);setTimeout(()=>tone(990,.4),200)}
+$('ver').textContent=APP_VER+'・'+APP_DATE;paintBest();paintModes();
+try{canSpeak()&&speechSynthesis.getVoices()}catch(e){}
+$('modes').onclick=e=>{const b=e.target.closest('button');if(b)pickMode(b.dataset.mode)};
 $('clearBest').onclick=()=>$('ask').classList.add('on');
 $('askNo').onclick=()=>$('ask').classList.remove('on');
 $('askYes').onclick=resetBest;
@@ -146,7 +156,7 @@ function renderPronList(){const src=$('pSrc').value,items=Matcher.filterCheckIte
  $('pNote').textContent=Matcher.checkNote(src,S)+(src==='ktest'&&!Matcher.checkList(src,pronData(),S).length?'。'+KTEST_HINT:'');
  const box=$('pList');box.innerHTML='';if(!items.length){box.textContent='ないよ';return}
  const frag=document.createDocumentFragment();items.forEach(it=>{const b=document.createElement('button');b.type='button';b.textContent=it.show;b.onclick=()=>openPron(it);frag.appendChild(b)});box.appendChild(frag)}
-function openPron(it){pItem=it;$('pPick').style.display='none';$('pSay').style.display='block';$('pWord').textContent=it.show;$('pWord').classList.toggle('sent',it.t==='s');$('pRead').textContent=it.t==='k'&&it.ans&&it.ans.length?it.ans.join('・'):'';$('pHeard').textContent='…';listenPron()}
+function openPron(it){pItem=it;$('pPick').style.display='none';$('pSay').style.display='block';$('pWord').textContent=it.show;$('pWord').classList.toggle('sent',it.t==='s');$('pRead').textContent=it.t==='k'&&it.ans&&it.ans.length?it.ans.join('・'):'';const sp=$('pSpeak');if(sp)sp.hidden=!(Matcher.speakable(it)&&canSpeak());$('pHeard').textContent='…';listenPron()}
 function listenPron(){stopPrec();if(!pItem)return;if(!SR){$('pMic').textContent='このブラウザは おんせいにんしきに たいおうしていません（iPhoneはSafari、AndroidはChromeでひらいてね）';return}
  const item=pItem,lang=item.t==='k'?'ja-JP':'en-US';prec=new SR();prec.lang=lang;prec.interimResults=true;prec.continuous=!/iPhone|iPad/.test(navigator.userAgent);prec.maxAlternatives=10;
  prec.onstart=()=>$('pMic').textContent='🎤 きいてるよ（'+(lang=='ja-JP'?'にほんご':'えいご')+'）';
@@ -159,6 +169,7 @@ function listenPron(){stopPrec();if(!pItem)return;if(!SR){$('pMic').textContent=
 function showPron(){stopPrec();pItem=null;$('pSay').style.display='none';$('pPick').style.display='block';$('pFind').value='';renderPronList();show('pron')}
 $('toCheck').onclick=showPron;$('pSrc').onchange=renderPronList;$('pFind').oninput=renderPronList;
 $('pRetry').onclick=()=>{if(!pItem)return;$('pHeard').textContent='…';listenPron()};
+$('pSpeak').onclick=()=>{if(pItem&&Matcher.speakable(pItem))speakEn(pItem.show)};
 $('pBackList').onclick=()=>{stopPrec();pItem=null;$('pSay').style.display='none';$('pPick').style.display='block'};
 $('pHome').onclick=()=>{stopPrec();pItem=null;show('home')};
 try{sessionStorage.removeItem('moguraReloading')}catch(e){}

@@ -183,7 +183,7 @@ check('照合は最終の不正解だけ',appSrc.includes("H.innerHTML=Matcher.r
 
 const self={};
 vm.runInNewContext(fs.readFileSync(root+'/version.js','utf8'),{self});
-check('版はv10.0.0',self.APP_VER==='v10.0.0');
+check('版はv11.0.0',self.APP_VER==='v11.0.0');
 check('更新日',self.APP_DATE==='2026/11/11');
 const sw=fs.readFileSync(root+'/sw.js','utf8');
 check('キャッシュ名はversion.js由来',sw.includes("importScripts('version.js')")&&sw.includes("const C='mogura-'+self.APP_VER"));
@@ -193,9 +193,9 @@ const precache=sw.slice(sw.indexOf('F=['),sw.indexOf('];')+1);
 for(const f of ['version.js','index.html','app.js','match.js','yomi.js','words.js'])check('事前キャッシュ '+f,precache.includes(f));
 check('テストは事前キャッシュしない',!precache.includes('test.js'));
 const C='mogura-'+self.APP_VER;
-check('小数の版もキャッシュ名にそのまま入る',C==='mogura-v10.0.0'&&C!=='mogura-v10'&&C!=='mogura-v9.0.0'&&C!=='mogura-v9'&&C!=='mogura-v8.0.0');
-const kept=['mogura-v5','mogura-v6','mogura-v6.1','mogura-v6.1.1','mogura-v6.1.2','mogura-v7','mogura-v7.0.0','mogura-v7.0.1','mogura-v7.0.2','mogura-v8','mogura-v8.0.0','mogura-v9','mogura-v9.0.0',C,'other-cache'].filter(k=>k===C);
-check('v10.0.0以外のキャッシュ名は破棄される',kept.length===1&&kept[0]==='mogura-v10.0.0');
+check('小数の版もキャッシュ名にそのまま入る',C==='mogura-v11.0.0'&&C!=='mogura-v11'&&C!=='mogura-v10.0.0'&&C!=='mogura-v10'&&C!=='mogura-v9.0.0');
+const kept=['mogura-v5','mogura-v6','mogura-v6.1','mogura-v6.1.1','mogura-v6.1.2','mogura-v7','mogura-v7.0.0','mogura-v7.0.1','mogura-v7.0.2','mogura-v8','mogura-v8.0.0','mogura-v9','mogura-v9.0.0','mogura-v10','mogura-v10.0.0',C,'other-cache'].filter(k=>k===C);
+check('v11.0.0以外のキャッシュ名は破棄される',kept.length===1&&kept[0]==='mogura-v11.0.0');
 check('画面の折り返し',html.includes('#heard .missd')&&html.includes('overflow-wrap:anywhere'));
 check('更新ボタンが下の安全域の上に固定',html.includes('id="upd"')&&html.includes('↻')&&html.includes('viewport-fit=cover')&&html.includes('safe-area-inset-bottom')&&html.includes('aria-label="さいしんばんにする"'));
 check('更新ボタンは各画面の外',html.indexOf('id="upd"')>html.indexOf('id="pron"')&&!html.slice(html.indexOf('id="game"'),html.indexOf('id="end"')).includes('id="upd"'));
@@ -205,7 +205,7 @@ check('アプリの取得は再検証',sw.includes("cache:'no-cache'")&&sw.inclu
 check('シートの取得はno-storeのまま',sw.includes("cache:'no-store'")&&sw.includes(".catch(()=>caches.match(e.request))"));
 check('SW登録はHTTPキャッシュを使わない',appSrc.includes("register('sw.js',{updateViaCache:'none'})"));
 check('更新の再読み込みは一度だけ',appSrc.includes('controllerchange')&&appSrc.includes('moguraReloading')&&appSrc.includes('if(reloading||sessionStorage.getItem(\'moguraReloading\')===\'1\')return'));
-check('設定に漢字テスト用がある',html.includes('value="ktest">漢字テスト用</option>')&&html.includes('id="ktestNote"'));
+check('漢字テスト用はタイトルで選ぶ',html.includes('data-mode="ktest">漢字テスト')&&html.includes('value="ktest">漢字テスト用</option>')&&!html.slice(html.indexOf('id="set"'),html.indexOf('id="game"')).includes('id="sMode"'));
 
 // 漢字テスト用。公開シートには書かず、ここだけの文字列で確かめる
 const testStart=appSrc.indexOf('function normHead');
@@ -431,7 +431,12 @@ const wiped=M.clearBest({ 'kanji:3':30,'kanji:4':50,ktest:40 },M.missBucket({mod
 check('きろくをけすのはいまの学年だけ',wiped['kanji:3']==null&&wiped['kanji:4']===50&&wiped.ktest===40&&M.bestScore(wiped,'kanji:3')===0);
 const homeHtml=html.slice(html.indexOf('id="home"'),html.indexOf('id="set"'));
 const setHtml=html.slice(html.indexOf('id="set"'),html.indexOf('id="game"'));
-check('せっていからさいこうきろくをけす',setHtml.includes('id="clearBest"')&&setHtml.includes('いまのモード・学年のさいこうきろくをけす')&&!homeHtml.includes('clearBest')&&!homeHtml.includes('きろくをけす')&&html.includes('このモード・学年の最高得点をけしますか？')&&appSrc.includes('Matcher.clearBest(readBest(),Matcher.missBucket(selectedSet()))')&&appSrc.includes("mode:$('sMode').value"));
+check('せっていからさいこうきろくをけす',setHtml.includes('id="clearBest"')&&setHtml.includes('いまのモード・学年のさいこうきろくをけす')&&!setHtml.includes('id="sMode"')&&!homeHtml.includes('clearBest')&&!homeHtml.includes('きろくをけす')&&html.includes('このモード・学年の最高得点をけしますか？')&&appSrc.includes('Matcher.clearBest(readBest(),Matcher.missBucket(selectedSet()))')&&appSrc.includes('mode:S.mode'));
+check('モードはタイトルで選ぶ',homeHtml.includes('id="modes"')&&homeHtml.includes('data-mode="kanji">漢字')&&homeHtml.includes('data-mode="eng">英語')&&homeHtml.includes('data-mode="sent">ショートセンテンス')&&homeHtml.includes('data-mode="emix"')&&homeHtml.includes('data-mode="mix"')&&appSrc.includes('function pickMode')&&appSrc.includes('paintBest();paintModes()')&&appSrc.includes("S.mode=mode"));
+check('英語と文だけ聞ける',M.speakable({t:'e',show:'cat'})&&M.speakable({t:'s',show:'I am ten.'})&&!M.speakable({t:'k',show:'犬',ans:['いぬ']})&&!M.speakable({t:'e',show:' '})&&!M.speakable(null));
+const speakBody=appSrc.slice(appSrc.indexOf('function speakEn'),appSrc.indexOf('function fillReview'));
+check('読み上げは英語でゆっくり',speakBody.includes('synth.cancel()')&&speakBody.includes("u.lang='en-US'")&&speakBody.includes('u.rate=0.85')&&speakBody.includes('/en-US/i.test')&&speakBody.includes('synth.speak(u)')&&!/listen|score|recordScore|rec\.start/.test(speakBody));
+check('ふくしゅうの英語にだけスピーカー',appSrc.includes('Matcher.speakable(q)&&canSpeak()')&&appSrc.includes("b.textContent='🔊'")&&appSrc.includes("sp.hidden=!(Matcher.speakable(it)&&canSpeak())")&&html.includes('id="pSpeak"'));
 check('さいこうきろくは2行',html.includes('<span class="cap">さいこうきろく</span><span class="pts">まだないよ</span>')&&html.includes('#best .cap,#rec .cap{display:block;font-size:28px')&&html.includes('#best .pts,#rec .pts{display:block;font-size:44px')&&appSrc.includes("n?'⭐'+n+'⭐':'まだないよ'")&&appSrc.includes("(rec.beat?'<span class=\"hi\">しんきろく！</span>':'')+bestLines(rec.best)")&&!appSrc.includes("'きろく "));
 check('認識の照合もhitを除く',appSrc.includes('moles.some(m=>m.q&&!m.hit)')&&appSrc.includes('moles.filter(m=>m.q&&!m.hit)'));
 
